@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import uuid
@@ -82,6 +83,15 @@ def changed_paths():
 
 def in_scope(path, allowed):
     return any(path.startswith(p) if p.endswith("/") else path == p for p in allowed)
+
+
+def release_lock(lock):
+    try:
+        lock.rmdir()
+    except PermissionError:
+        # OneDrive and other sync tools mark new folders read-only on Windows.
+        os.chmod(lock, stat.S_IWRITE)
+        lock.rmdir()
 
 
 def run_logged(command, output, errors, timeout, prompt=None):
@@ -182,7 +192,7 @@ def main(argv=None):
             if run_dir.exists():
                 (run_dir / "verification.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
         finally:
-            lock.rmdir()
+            release_lock(lock)
     print(json.dumps({"run": str(run_dir.relative_to(ROOT)), **result}, ensure_ascii=False, indent=2))
     return 0 if result["passed"] else 1
 
