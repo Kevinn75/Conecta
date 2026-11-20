@@ -87,7 +87,7 @@ def in_scope(path, allowed):
 def run_logged(command, output, errors, timeout, prompt=None):
     with output.open("w", encoding="utf-8") as out, errors.open("w", encoding="utf-8") as err:
         process = subprocess.Popen(command, cwd=ROOT, stdin=subprocess.PIPE,
-                                   stdout=out, stderr=err, text=True,
+                                   stdout=out, stderr=err, text=True, encoding="utf-8",
                                    start_new_session=(os.name == "posix"))
         try:
             process.communicate(prompt, timeout=timeout)
