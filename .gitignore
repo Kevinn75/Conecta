@@ -3,3 +3,17 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+
+# Desarrollo local; nunca subir credenciales ni trazas de agentes.
+.pio/
+node_modules/
+__pycache__/
+*.pyc
+.ai-runs/
+.claude/settings.local.json
+.env
+.env.*
+!.env.example
+.playwright-cli/
+test-results/
+playwright-report/

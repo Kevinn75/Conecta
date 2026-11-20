@@ -1,0 +1,15 @@
+{
+  "id": "frontend-foundation",
+  "objective": "Crear una primera interfaz estática de demostración para CONECTA en web/. Seguir el brief, con inicio, ubicación, necesidad y comprobante simulado. No conectar una API ficticia como si fuera real.",
+  "read": ["docs/ai/CONTEXTO.md", "docs/ai/FRONTEND.md", "platformio.ini"],
+  "write": ["web/"],
+  "acceptance": [
+    "HTML, CSS y JavaScript con recursos locales, sin framework ni CDN",
+    "Flujo en español usable a 360 px y con teclado",
+    "Permitir desconocer el barrio e introducir una referencia alternativa",
+    "Validar campos sin perder el contenido",
+    "Identificar siempre el modo demostración y no afirmar recepción del PMU",
+    "Incluir web/README.md con arranque local, límites y escenarios manuales"
+  ],
+  "checks": [["node", "--check", "web/app.js"]]
+}

@@ -1,0 +1,8 @@
+{
+  "id": "repository-audit",
+  "objective": "Inspeccionar el estado de CONECTA y resumir qué existe y qué falta antes de implementar el frontend. No editar archivos.",
+  "read": ["docs/ai/CONTEXTO.md", "platformio.ini", "src/main.cpp", "lib/Servidor/principal.c", "Data/Data.sql"],
+  "write": [],
+  "acceptance": ["Distinguir código real de módulos vacíos", "Identificar como propuestas los contratos aún no implementados"],
+  "checks": []
+}
