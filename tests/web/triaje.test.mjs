@@ -96,3 +96,25 @@ test('autorización normal, referencia desconocida e identidad son obligatorias 
  assert.throws(()=>T.construirPayload({...listo(),fecha:null}));
  assert.throws(()=>T.construirPayload(listo(),T.clasificarRiesgo(base())));
 });
+
+for(const valor of ['0','-3','1.5','200000','texto'])test(`H2: urgente con cifra ${valor} conserva evidencia y envía null`,()=>{
+ const raw={...listo(),rapidPersons:valor},antes=structuredClone(raw);
+ assert.ok(T.validarReporte(raw).errores.some(e=>e.campo==='rapidPersons'));
+ const p=T.construirPayload(raw,T.clasificarRiesgo(raw));
+ assert.equal(p.personas,null);assert.equal(p.triajeSugerido.nivel,'critico');
+ assert.ok(p.triajeSugerido.reglasActivadas.includes('V3'));
+ assert.equal(p.triajeSugerido.respuestasOriginales.rapidPersons,valor);
+ assert.equal(T.construirResumenRadio(p).p,null);assert.deepEqual(raw,antes);
+ const normal={...raw,danger:'No',persons:valor,needs:['Agua potable'],reviewConsent:true,consents:[consent('solicitud')]};
+ assert.throws(()=>T.construirPayload(normal),/entero/);
+});
+
+test('H2: residuos normales no bloquean el aviso urgente ni pasan a sus campos operativos',()=>{
+ const raw={...listo(),rapidPersons:'4',who:'Solo a mí',observed:'Hace aproximadamente',minutes:null,needs:['No sé todavía','Agua potable'],topNeed:'Alimentos',support:['opción inválida'],otherNeed:'x'.repeat(101)};
+ const antes=structuredClone(raw),p=T.construirPayload(raw);
+ assert.equal(p.personas,4);assert.equal(p.quienIncluye,null);assert.equal(p.observado,null);
+ assert.equal(p.otraNecesidad,null);assert.deepEqual(p.necesidades,[]);assert.deepEqual(p.apoyos,[]);
+ assert.equal(p.triajeSugerido.nivel,'critico');assert.ok(p.triajeSugerido.reglasActivadas.includes('V3'));
+ assert.deepEqual(raw,antes);
+ assert.throws(()=>T.construirPayload({...raw,danger:'No',reviewConsent:true,consents:[consent('solicitud')]}));
+});

@@ -59,11 +59,11 @@ function interfaz(search=''){
  function nodo(id){if(!nodos.has(id))nodos.set(id,{id,innerHTML:'',textContent:'',value:'',classList:{toggle(){},add(){},contains(){return false}},addEventListener(){},setAttribute(){},focus(){focos.push(id)},querySelector(sel){return sel==='h2'?{focus(){focos.push('h2')}}:null},querySelectorAll(){return []}});return nodos.get(id)}
  const document={getElementById:nodo,querySelector(){return nodo('phone')},addEventListener(){}};
  const sandbox=entorno({document,location:{search},window:{scrollTo(){},scrollY:0}});
- const instrumentada=fuente.replace(/\}\s*$/,`globalThis.ui={state,initialState,route,goto,dispatch,validLocation,filterPlaces,logConsent,page,render,next,updateField};\n}`);
+ const instrumentada=fuente.replace(/\}\s*$/,`globalThis.ui={state,initialState,route,goto,dispatch,validLocation,filterPlaces,logConsent,page,render,next,updateField,clickHandler};\n}`);
  vm.runInNewContext(instrumentada,sandbox);return {ui:sandbox.ui,nodos,focos,sandbox};
 }
 test('rutas V5, respuestas vacías y foco al cambiar de pantalla',()=>{
- const {ui,focos}=interfaz();assert.equal(ui.state.danger,null);assert.equal(ui.state.persons,'');assert.equal(ui.state.reviewConsent,false);assert.equal(ui.state.contactConsent,false);assert.equal(ui.state.healthConsent,false);
+ const {ui,focos}=interfaz();assert.deepEqual(focos,[]);assert.equal(ui.state.danger,null);assert.equal(ui.state.persons,'');assert.equal(ui.state.reviewConsent,false);assert.equal(ui.state.contactConsent,false);assert.equal(ui.state.healthConsent,false);
  assert.equal(JSON.stringify(ui.route()),JSON.stringify(['inicio','ubicacion','necesidades','espera','revision','comprobante']));ui.state.danger='Sí';assert.equal(JSON.stringify(ui.route()),JSON.stringify(['inicio','urgencia','comprobante']));ui.goto('urgencia');assert.equal(focos.at(-1),'h2');
 });
 test('No sé en qué barrio estoy exige referencia y cantidades enteras',()=>{
@@ -86,4 +86,34 @@ test('estación no autentica con PIN local ni finge recepción de solicitudes',(
 test('recursos relativos en HTML, sin scripts inline ni puente PMU',()=>{
  const html=readFileSync(new URL('../../data/index.html',import.meta.url),'utf8');for(const nombre of ['estilo.css','lugares.js','triaje.js','app.js'])assert.ok(html.includes('"'+nombre+'"'));
  assert.ok(!/<script>/.test(html));assert.ok(!/BroadcastChannel|Promise\.resolve|setInterval|onPMU/.test(fuente));
+});
+
+function elegirPeligro(ui,value){ui.clickHandler({target:{closest(selector){return selector==='[data-choice]'?{dataset:{choice:'danger',value,check:'false'}}:null}}})}
+const snapshot=s=>JSON.parse(JSON.stringify(s));
+for(const [desde,hacia] of [[null,'No'],[null,'No sé'],[null,'Sí'],['Sí','No'],['Sí','No sé'],['No','Sí'],['No sé','Sí']])test(`H1: ${desde} → ${hacia} limpia solo la otra ruta`,()=>{
+ const {ui}=interfaz();Object.assign(ui.state,{danger:desde,hazard:'Personas atrapadas',rapidPersons:'7',needs:['Alimentos'],topNeed:'Alimentos',why:'Ya se acabaron',whyFor:'Alimentos',waiting:'No podemos esperar',who:'Solo a mí',observed:'Hace aproximadamente',minutes:'10 minutos',otherNeed:'Dato ficticio',persons:'4',unknownPersons:true,support:['Ayuda para el traslado'],location:Lugares[0],locationQuery:Lugares[0].nombre,reference:'Referencia ficticia',unknownNeighborhood:true,reviewConsent:true,contactConsent:true,contactAlias:'Alias ficticio',contactPhone:'3000000000',healthConsent:true,healthCats:['Movilidad reducida'],consents:[{tipo:'contacto',otorgada:true}],requests:[{tipo:'correccion',texto:'Ficticio'}],verified:true,authCode:'FICTICIO'});
+ const esperado=snapshot(ui.state);
+ Object.assign(esperado,hacia==='Sí'?{needs:[],topNeed:null,why:null,whyFor:null,waiting:null,who:null,observed:null,minutes:null,otherNeed:'',persons:'',unknownPersons:false,support:[]}:{hazard:null,rapidPersons:''},{danger:hacia});
+ elegirPeligro(ui,hacia);assert.deepEqual(snapshot(ui.state),esperado);
+});
+test('H1: repetir respuesta o cambiar entre No y No sé conserva datos de la misma ruta',()=>{
+ for(const [desde,hacia] of [['Sí','Sí'],['No','No'],['No','No sé'],['No sé','No']]){
+  const {ui}=interfaz();Object.assign(ui.state,{danger:desde,hazard:'Personas atrapadas',rapidPersons:'3',needs:['Alimentos'],persons:'2'});
+  const esperado={...snapshot(ui.state),danger:hacia};elegirPeligro(ui,hacia);assert.deepEqual(snapshot(ui.state),esperado);
+ }
+});
+for(const valor of ['0','-3','1.5','200000','texto'])test(`H2: UI crea y envía el aviso con cifra ${valor} y advertencia`,async()=>{
+ const {ui,nodos,sandbox}=interfaz('?modo=estacion');const enviados=[];
+ sandbox.fetch=async(url,init)=>{enviados.push(JSON.parse(init.body));return res(200,{status:'en_espera'})};
+ Object.assign(ui.state,raw(),{locationQuery:Lugares[0].nombre,rapidPersons:valor,who:'Solo a mí',persons:'4'});ui.goto('urgencia');
+ ui.dispatch('sendRapid');await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(ui.state.screen,'comprobante');assert.ok(ui.state.reportId);assert.equal(enviados.length,1);
+ assert.equal(enviados[0].personas,null);assert.ok(enviados[0].triajeSugerido.reglasActivadas.includes('V3'));
+ assert.match(nodos.get('app').innerHTML,/cantidad de personas no es válida/);
+ assert.match(nodos.get('app').innerHTML,/role="status" aria-live="polite"/);
+});
+test('H2: UI normal sigue bloqueando una cifra inválida',()=>{
+ const {ui}=interfaz();Object.assign(ui.state,{danger:'No',persons:'0',location:Lugares[0],locationQuery:Lugares[0].nombre,needs:['Alimentos'],waiting:'Más de 24 horas',reviewConsent:true});
+ ui.logConsent('solicitud',true);ui.goto('revision');ui.dispatch('sendNormal');
+ assert.equal(ui.state.screen,'revision');assert.equal(ui.state.reportId,'');assert.match(ui.state.statusMessage,/entero/);
 });
