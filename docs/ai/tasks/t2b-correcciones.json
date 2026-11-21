@@ -1,0 +1,36 @@
+{
+  "id": "t2b-correcciones",
+  "objective": "Corregir los hallazgos H1-H5 de docs/AUDITORIA_CLAUDE.md en data/ sin cambiar textos legales ni el diseño de V5. H1: al elegir o cambiar la respuesta de peligro inmediato (state.danger) a una ruta distinta, borrar los campos exclusivos de la otra ruta. Hacia ruta normal: hazard=null y rapidPersons=''. Hacia ruta urgente: needs=[], topNeed, why, whyFor, waiting, who, observed, minutes =null, otherNeed='', persons='', unknownPersons=false, support=[]. No tocar ubicación (location, locationQuery, reference, unknownNeighborhood), consents, autorizaciones, contacto, salud ni requests. H2: en la ruta urgente (danger==='Sí') un aviso nunca se bloquea por datos opcionales o residuales: rapidPersons inválido (0, negativo, decimal, >100000, no numérico) se envía como personas:null con la regla V3 y una advertencia visible no bloqueante; validarReporte puede seguir informando el error, pero issueReceipt y construirPayload no deben impedir crear ni enviar el aviso urgente; en ruta normal se mantiene el comportamiento actual. Actualizar docs/REGLAS_TRIAJE.md con esta excepción de ruta urgente. H3: no mover el foco en el render inicial; mantener el foco al h2 al cambiar de pantalla, y los h2 con tabindex=-1 sin anillo visible (outline:none solo para ese caso); con eso inicio debe ser idéntico a V5 píxel a píxel. H4: con el menú de sugerencias abierto, ninguna parte del botón «No sé en qué barrio estoy» puede quedar bajo el menú (por ejemplo, el menú desplaza el contenido o se limita su altura); con el menú cerrado el aspecto debe ser idéntico a V5. H5: reducir data/ por debajo de 100000 bytes totales (sin Data.sql) eliminando reglas CSS muertas o sobrescritas y espacios innecesarios en CSS/JS, sin cambiar el aspecto de ninguna pantalla, textos, catálogo ni comportamiento; si no se alcanza, informar el número exacto. Añadir en tests/web pruebas de Node para H1 y H2. No modificar tests/navegador (auditoría de Claude), la línea base legal, docs/referencia ni archivos del backend.",
+  "read": [
+    "docs/AUDITORIA_CLAUDE.md",
+    "docs/REGLAS_TRIAJE.md",
+    "docs/CONTRATO_JSON.md",
+    "docs/referencia/CONECTA_redisenado_experiencia_v5.html",
+    "tests/navegador/auditoria.spec.mjs",
+    "data/app.js",
+    "data/triaje.js",
+    "data/estilo.css",
+    "data/index.html"
+  ],
+  "write": [
+    "data/index.html", "data/estilo.css", "data/app.js", "data/triaje.js", "data/lugares.js",
+    "tests/web/triaje.test.mjs", "tests/web/app.test.mjs", "tests/web/lugares.test.mjs",
+    "docs/REGLAS_TRIAJE.md"
+  ],
+  "acceptance": [
+    "Pruebas 2a, 2b, 9, 10 y 11 de tests/navegador pasan sin modificar ese archivo",
+    "Las 19 pruebas de tests/navegador pasan, incluida la equivalencia legal con V5",
+    "130/130 fragmentos legales; 514 lugares; pruebas de Node en verde",
+    "Tamaño total de data/ medido y reportado; objetivo < 100000 bytes"
+  ],
+  "checks": [
+    ["node", "--check", "data/app.js"],
+    ["node", "--check", "data/triaje.js"],
+    ["node", "--check", "data/lugares.js"],
+    ["node", "--test", "tests/web/*.test.mjs"],
+    ["node", "tests/web/verificar_legal.mjs", "data"],
+    ["node", "tests/web/medir.mjs"],
+    ["node", "tests/navegador/node_modules/@playwright/test/cli.js", "test", "--config", "tests/navegador/playwright.config.mjs"],
+    ["git", "diff", "--quiet", "HEAD", "--", "tests/navegador", "tests/web/base_legal.json", "tests/web/verificar_legal.mjs", "docs/referencia", "lib/Servidor", "src", "platformio.ini"]
+  ]
+}

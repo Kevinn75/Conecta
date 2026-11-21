@@ -1,0 +1,12 @@
+{
+  "name": "conecta-auditoria-navegador",
+  "private": true,
+  "description": "Auditoría de Claude en Chromium real: data/ frente a V5. No se sube a LittleFS.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.65.1"
+  }
+}
