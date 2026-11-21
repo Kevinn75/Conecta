@@ -1,0 +1,28 @@
+{
+  "id": "t4-integracion-pmu",
+  "objective": "Fase 5 y entregables 5 y 6 del prompt maestro, sin tocar data/, lib/Servidor, src ni platformio.ini. (1) docs/INTEGRACION_BACKEND.md: para la responsable de backend, qué funciones de lib/Triaje debe invocar y dónde (tras parsear el cuerpo de POST /api/reporte en lib/Servidor/Servidor.cpp, sin reescribir su clase), cómo implementar FuenteIncidentes sobre su persistencia en LittleFS sin cargar reportes.jsonl en RAM, cuándo puede responder {estado:'guardado',idReporte,recibidoEnEstacion:true} (solo tras persistencia atómica), cómo tratar reintentos, 409, 429 y 503, qué entregar a lib/Lora y lib/Protocol (estructura de construirResumenRadio, sin contacto, salud ni texto libre), observaciones sobre su código actual citando líneas reales de Servidor.cpp (por ejemplo que /api/reporte responde siempre 200 en_espera sin leer el cuerpo, que el comentario de TTL dice 0 y el código usa 60, que no hay rutas de estado ni GET /api/tablero) sin proponer cambios ya hechos, y una lista explícita de lo que NO está implementado. Incluir el ejemplo tests/triaje/integracion_servidor/main.cpp como referencia y los datos de memoria medidos (RAM 15,9 %, flash 12,4 % en env:estacion; IncidenteAgrupado 5840 bytes, MotorTriaje 6696 bytes; FuenteMemoria<64,256> 586776 bytes solo para pruebas en PC). Mencionar que en esta rama Data/ se renombró a data/ y necesita su aprobación. (2) docs/ENTREGA_PMU.md: para el responsable del tablero PMU, esquema serializable de IncidenteAgrupado (incidenteId, zona, tipo, prioridadSugerida, estadoVerificacion, cantidadReportes, cantidadPersonasDeclaradas NO únicas, necesidades, razones, reportes[] con IDs individuales, fechas, banderas de revisión) coherente con serializarJson de lib/Triaje/Triaje.cpp y con docs/CONTRATO_JSON.md, marcado como PROPUESTA PENDIENTE DE ACUERDO, y GET /api/tablero como pendiente. (3) tools/pmu-maqueta/index.html: maqueta autónoma (HTML+CSS+JS en un solo archivo, sin red externa) de una tarjeta de incidente desplegable alimentada con datos ficticios en el mismo esquema: muestra prioridad sugerida con texto y forma (no solo color), marca por verificar, revisión antifraude, cantidad de reportes y personas declaradas con la aclaración de que no son únicas, y al desplegar cada reporte individual con sus necesidades, sin contacto ni datos de salud; accesible con teclado (button con aria-expanded) y legible a 390 px; un aviso visible indica que es una maqueta con datos ficticios y que no reemplaza el tablero del integrante PMU.",
+  "read": [
+    "docs/referencia/CONECTA_PROMPT_MAESTRO_CODEX_CLAUDE.md",
+    "docs/CONTRATO_JSON.md",
+    "docs/REGLAS_TRIAJE.md",
+    "docs/ai/CONTEXTO.md",
+    "lib/Triaje/Triaje.h",
+    "lib/Triaje/Triaje.cpp",
+    "lib/Triaje/README.md",
+    "lib/Servidor/Servidor.h",
+    "lib/Servidor/Servidor.cpp",
+    "src/main.cpp",
+    "tests/triaje/integracion_servidor/main.cpp"
+  ],
+  "write": ["docs/INTEGRACION_BACKEND.md", "docs/ENTREGA_PMU.md", "tools/pmu-maqueta/index.html"],
+  "acceptance": [
+    "Solo se crean los tres archivos; backend, data/ y lib/Triaje sin cambios",
+    "Lo no implementado aparece en una lista explícita",
+    "Esquema de incidente marcado como PROPUESTA PENDIENTE DE ACUERDO y coherente con serializarJson",
+    "La maqueta no usa red externa, no muestra contacto ni salud y declara que los datos son ficticios"
+  ],
+  "checks": [
+    ["node", "-e", "const f=require('fs');const b=f.readFileSync('docs/INTEGRACION_BACKEND.md','utf8'),p=f.readFileSync('docs/ENTREGA_PMU.md','utf8'),m=f.readFileSync('tools/pmu-maqueta/index.html','utf8');for(const s of ['FuenteIncidentes','guardado','NO está implementado','Servidor.cpp'])if(!b.includes(s))throw new Error('INTEGRACION falta '+s);for(const s of ['PROPUESTA PENDIENTE DE ACUERDO','cantidadPersonasDeclaradas','/api/tablero'])if(!p.includes(s))throw new Error('PMU falta '+s);if(/https?:\\/\\/(?!www\\.w3\\.org)/.test(m))throw new Error('URL externa en maqueta');if(!/aria-expanded/.test(m))throw new Error('Sin aria-expanded');if(/telefono|tel[eé]fono|salud\"\\s*:/i.test(m))throw new Error('Datos sensibles en maqueta')"],
+    ["git", "diff", "--quiet", "HEAD", "--", "data", "lib", "src", "platformio.ini", "tests"]
+  ]
+}
