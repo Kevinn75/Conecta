@@ -41,7 +41,9 @@ uint32_t hashTextoNormalizado(const char* texto) {
 ServidorHotspot::ServidorHotspot()
     : _apIP(192, 168, 4, 1),
       _netMsk(255, 255, 255, 0),
-      _server(80) {}
+      _server(80) {
+    snprintf(_ssid, sizeof(_ssid), "punto_de_ayuda_conecta_%s", ID_ESTACION);
+}
 
 uint32_t ServidorHotspot::hashFnv1a(const char* texto) {
     uint32_t h = 2166136261u;

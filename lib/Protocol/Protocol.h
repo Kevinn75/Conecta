@@ -22,7 +22,12 @@ enum CategoriaEmergencia : uint8_t {
     CAT_VOLCANICA     = 8,
     CAT_DONACIONES    = 9,
     CAT_INVENTARIOS   = 10,
-    CAT_ENTREGAS      = 11
+    CAT_ENTREGAS      = 11,
+    CAT_INCENDIO      = 12,
+    CAT_INUNDACION    = 13,
+    CAT_ROBO          = 14,
+    CAT_ACOSO         = 15,
+    CAT_MEDICA        = 16
 };
 
 // Estructura empaquetada para transmision directa por ESP-NOW (128 bytes <= limite 250 bytes)

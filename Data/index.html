@@ -142,7 +142,7 @@ const byId=id=>document.getElementById(id);
 /* Transporte real: misma origin HTTP de la ESP32-S3, POST /api/reporte.
    En file:// la interfaz funciona para vista previa, pero el envío NO es posible. */
 const TOWER_ID='E01';
-const HAZARDS={'Derrumbe o deslizamiento':'derrumbe','Actividad volcánica':'volcanica','Terremoto o temblor':'terremoto','Personas atrapadas':'atrapadas','Otro peligro / No sé':'otro'};
+const HAZARDS={'Derrumbe o deslizamiento':'derrumbe','Actividad volcánica':'volcanica','Terremoto o temblor':'terremoto','Personas atrapadas':'atrapadas','Incendio':'incendio','Inundación':'inundacion','Robo':'robo','Acoso':'acoso','Necesidad médica':'medica','Otro peligro / No sé':'otro'};
 const PMU_LBL={recibido:'Recibido por el PMU',en_atencion:'El PMU está atendiendo el reporte',atendido:'Reporte atendido',duplicado:'Reporte agrupado'};
 function footer(){const el=byId('footerStatus');if(!el)return;el.textContent=location.protocol==='file:'?'Vista previa local: para enviar conéctate al Wi-Fi CONECTA y abre http://192.168.4.1/':'Estación CONECTA · El comprobante confirma ingreso a la cola, no recepción en el PMU.';}
 function buildPayload(){ // Solo lo necesario. Nunca la clave privada. Contacto y salud solo con autorización vigente.
@@ -254,7 +254,7 @@ function firmwareLocationId(){
 }
 function buildFirmwarePacket(){
   const rapid=state.danger==='Sí';
-  const cats={derrumbe:2,volcanica:8,terremoto:7,atrapadas:1,otro:5};
+  const cats={derrumbe:2,volcanica:8,terremoto:7,atrapadas:1,incendio:12,inundacion:13,robo:14,acoso:15,medica:16,otro:5};
   const mask=state.needs.reduce((n,x)=>n|({'Agua potable':1,'Alimentos':2,'Refugio o alojamiento':4,'Apoyo en salud':8}[x]||0),0);
   const num=rapid?(state.rapidPersons.trim()?Number(state.rapidPersons):0):(state.unknownPersons?0:Number(state.persons));
   if(!Number.isInteger(num)||num<0||num>255)throw Error('Esta versión del firmware admite de 0 a 255 personas. Reduce la cifra o indica que no conoces el número.');

@@ -42,7 +42,7 @@ CAT_MAP = {
     1: "atrapadas",
     2: "derrumbe",
     3: "terremoto",
-    4: "atrapadas",
+    4: "medica",
     5: "otro",
     6: "necesidades",
     7: "terremoto",
@@ -50,9 +50,14 @@ CAT_MAP = {
     9: "donaciones",
     10: "inventarios",
     11: "entregas",
+    12: "incendio",
+    13: "inundacion",
+    14: "robo",
+    15: "acoso",
+    16: "medica",
 }
 
-CATS_URGENTES = {"atrapadas", "derrumbe", "terremoto", "volcanica", "otro"}
+CATS_URGENTES = {"atrapadas", "derrumbe", "terremoto", "volcanica", "incendio", "inundacion", "robo", "acoso", "medica", "otro"}
 
 
 class EstadoBackendV7:

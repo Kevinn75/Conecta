@@ -159,6 +159,11 @@ const CATS={
   volcanica:{n:'Actividad volcánica',c:'#ea580c',em:1},
   terremoto:{n:'Terremoto',c:'#7c3aed',em:1},
   atrapadas:{n:'Personas atrapadas',c:'#be123c',em:1},
+  incendio:{n:'Incendio',c:'#dc2626',em:1},
+  inundacion:{n:'Inundación',c:'#0369a1',em:1},
+  robo:{n:'Robo',c:'#1e3a8a',em:1},
+  acoso:{n:'Acoso',c:'#9333ea',em:1},
+  medica:{n:'Necesidad médica',c:'#0f766e',em:1},
   otro:{n:'Otro peligro',c:'#475569',em:1},
   necesidades:{n:'Necesidades',c:'#db2777'},
   donaciones:{n:'Donaciones',c:'#16a34a'},
@@ -177,8 +182,9 @@ const ENT_TYPES={
 };
 /* Qué entidad atiende cada tipo de evento (ajustar con el protocolo oficial de la UGR) */
 const ROUTES={derrumbe:['bomberos','ugr','cruzroja','defensa'],volcanica:['ugr','defensa','cruzroja'],terremoto:['ugr','bomberos','cruzroja','hospital'],
-  atrapadas:['bomberos','cruzroja','hospital'],otro:['ugr','bomberos'],incendio:['bomberos'],seguridad:['policia'],inundacion:['ugr','bomberos','defensa'],
-  salud:['hospital','cruzroja'],necesidades:['logistica'],donaciones:['logistica'],inventarios:['logistica'],entregas:['logistica']};
+  atrapadas:['bomberos','cruzroja','hospital'],otro:['ugr','bomberos'],incendio:['bomberos','cruzroja'],seguridad:['policia'],robo:['policia'],acoso:['policia'],
+  inundacion:['ugr','bomberos','defensa'],medica:['hospital','cruzroja'],salud:['hospital','cruzroja'],
+  necesidades:['logistica'],donaciones:['logistica'],inventarios:['logistica'],entregas:['logistica']};
 
 /* Centroides APROXIMADOS por comuna/corregimiento. Reemplazar por GeoJSON oficial. */
 const ZONES={'Cumanday':[5.0690,-75.5160],'San José':[5.0655,-75.5255],'Atardeceres':[5.0742,-75.5292],'La Estación':[5.0628,-75.5048],
@@ -202,9 +208,9 @@ function toast(t){const d=document.createElement('div');d.textContent=t;$('toast
 
 /* ---------- Geocodificación de catálogos ---------- */
 /* Torres por defecto (coordenadas APROXIMADAS). Las reales de cada ESP32 se ponen en config.js → torres. */
-const DEFAULT_TOWERS=[{id:'E01',nombre:'La Enea',lat:5.0318,lon:-75.4700},{id:'E02',nombre:'La Carola',lat:5.0505,lon:-75.5140},{id:'E03',nombre:'Chipre',lat:5.0730,lon:-75.5265},
+const DEFAULT_TOWERS=[{id:'E01',nombre:'La Enea',lat:5.0318,lon:-75.4700},{id:'E02',nombre:'Villamaría',lat:5.0445,lon:-75.5145},{id:'E03',nombre:'Chipre',lat:5.0730,lon:-75.5265},
  {id:'E04',nombre:'Centro',lat:5.0687,lon:-75.5174},{id:'E05',nombre:'Bosques del Norte',lat:5.0815,lon:-75.4990},{id:'E06',nombre:'Villa Carmenza',lat:5.0575,lon:-75.5115},
- {id:'E07',nombre:'El Tablazo',lat:5.1150,lon:-75.4750},{id:'E08',nombre:'El Cable',lat:5.0565,lon:-75.4925},{id:'E09',nombre:'Palogrande',lat:5.0555,lon:-75.4878}];
+ {id:'E07',nombre:'El Tablazo',lat:5.1150,lon:-75.4750},{id:'E08',nombre:'Palogrande',lat:5.0565,lon:-75.4925},{id:'E09',nombre:'El Cable',lat:5.0555,lon:-75.4878}];
 const TOWER_DEFS=((window.CONECTA_CONFIG||{}).torres||[]).length?window.CONECTA_CONFIG.torres:DEFAULT_TOWERS;
 const BYNAME={};
 PLACES.forEach(p=>{const z=ZONES[p.zona]||ZONES['Cumanday'];p.ll=jitter(z,p.id,RURAL.has(p.zona)?3.2:(p.zona==='Villamaría'?0.6:0.75));p.rural=RURAL.has(p.zona);(BYNAME[norm(p.nombre)]=BYNAME[norm(p.nombre)]||[]).push(p)});

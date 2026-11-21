@@ -20,7 +20,7 @@ public:
     void setCallbackReporte(CallbackReporte cb);
 
 private:
-    const char* _ssid = "punto_de_ayuda_conecta";
+    char _ssid[33];
     const byte _puertoDNS = 53;
     uint8_t _canalWiFi = CANAL_ESPNOW;
 
