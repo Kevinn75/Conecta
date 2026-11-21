@@ -33,7 +33,7 @@ Los límites nuevos son parámetros propuestos, no capacidades verificadas de la
 | `categoria` | string | Sí | No | `derrumbe`, `volcanica`, `terremoto`, `atrapadas`, `otro`, `necesidades` | Códigos reales de HAZARDS; normal usa `necesidades`. |
 | `ubicacion` | objeto | Sí | No | Variantes de §3 | Lugar declarado; no GPS ni IP del usuario. |
 | `referencia` | string | Sí | Sí | 1–160 si presente; mínimo 6 sin ubicación conocida | Descripción del lugar, sin nombres ni salud. |
-| `personas` | entero | Sí | Sí | 1–10000 propuesto | Estimación declarada; null significa cantidad desconocida. Límite sujeto a revisión operativa. |
+| `personas` | entero | Sí | Sí | 1–100000 (máximo real de los inputs de V5) | Estimación declarada; null significa cantidad desconocida. Límite sujeto a revisión operativa. |
 | `quienIncluye` | string | Sí | Sí | `Solo a mí`, `A mi hogar`, `A varias familias`, `A otra persona o grupo`, `No sé` | `state.who`; urgente envía null. No representa una cantidad de familias. |
 | `observado` | string | Sí | Sí | `Ahora`, `Me lo contaron`, `No sé`, o `Hace aproximadamente` seguido de opción temporal | Opciones: `10 minutos`, `15 minutos`, `30 minutos`, `31 a 60 minutos`, `Más de una hora`. Vacío de V5 se normaliza a null. |
 | `necesidades` | array de string | Sí | No | Sin repetidos, 0–6; catálogo N | `state.needs`; urgente puede usar `[]`, normal requiere al menos una opción. |
@@ -96,7 +96,7 @@ V5 no serializa directamente `danger`, y en ruta urgente descarta algunas respue
 | Nombre en `respuestasOriginales` | Tipo | Obligatorio | Null permitido | Rango/enumeración | Semántica |
 | --- | --- | --- | --- | --- | --- |
 | `danger` | string | Sí | Sí | `Sí`, `No`, `No sé` | Declaración original; null si falta. |
-| `hazard` | string | Sí | Sí | Etiqueta HAZARDS de REGLAS_TRIAJE.md | No sustituir etiqueta por una inferencia geográfica. |
+| `hazard` | string | Sí | Sí | Etiqueta HAZARDS de REGLAS_TRIAJE.md | No sustituir etiqueta por una inferencia geográfica. Solo cuenta con danger === 'Sí'; si se cambió a No o No sé, conservar el hazard abandonado como evidencia: no activa C2, C3 ni A7, solo añade V3 con motivo 'Se eligió un peligro y luego se cambió la respuesta sobre peligro inmediato'. |
 | `needs` | array de string | Sí | No | Catálogo N | Copia de entrada, coherente con necesidades en normal. |
 | `topNeed` | string | Sí | Sí | Catálogo N, `Ambas por igual`, `No sé` | Necesidad priorizada, sin rellenar ausencias. |
 | `why` | string | Sí | Sí | Opciones V5 documentadas en reglas | Motivo explícito original. |
@@ -182,7 +182,7 @@ El frontend debe bloquear doble clic durante un intento, congelar ID, fecha y cu
 | `c` | string | Sí | No | Enumeración de categoria | Categoría codificada. |
 | `u` | string | Sí | No | ID de catálogo, código de zona acordado o `POR_VERIFICAR` | V5 usa id, zona o marcador; solo admitir zona de catálogo codificada, nunca texto manual. |
 | `n` | array de string | Sí | No | `AG`, `AL`, `RF`, `SA`, `OT`, `NS`; sin repetidos | Códigos respectivos de N. `SA` es solicitud de apoyo, no condición de salud. |
-| `p` | entero | Sí | Sí | 1–10000 propuesto | Personas declaradas, no únicas. |
+| `p` | entero | Sí | Sí | 1–100000 (máximo real de los inputs de V5) | Personas declaradas, no únicas. |
 | `r` | entero | Sí | No | 0 normal, 1 urgente | Ruta de captura, no acuse ni nivel PMU. |
 
 ```json

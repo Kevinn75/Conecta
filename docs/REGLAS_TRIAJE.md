@@ -17,7 +17,7 @@ Conservar la instantánea original; normalizar en otra representación. No relle
 | `why` | Opciones por contexto abajo; null permitido por ser complemento opcional → `prioridad.motivo` normal. |
 | `waiting` | `No podemos esperar`, `Dentro de las próximas 24 horas`, `Más de 24 horas`, `No sé`, null → `prioridad.espera` normal. |
 | `unknownNeighborhood`, `location`, `reference`, `locationQuery` | Ubicación desconocida, selección del catálogo y referencia manual. Sin selección válida siempre por verificar; una referencia no acredita coordenadas. |
-| `persons`, `rapidPersons`, `unknownPersons` | Controles originales en texto; usar `rapidPersons` si danger Sí, en otro caso persons salvo unknownPersons. Entero 1–10000 o null en el contrato propuesto. |
+| `persons`, `rapidPersons`, `unknownPersons` | Controles originales en texto; usar `rapidPersons` si danger Sí, en otro caso persons salvo unknownPersons. Entero 1–100000 (máximo real de los inputs de V5) o null en el contrato propuesto. |
 | `who` | `Solo a mí`, `A mi hogar`, `A varias familias`, `A otra persona o grupo`, `No sé`, null → `quienIncluye` normal. No existe cantidad de familias. |
 
 Opciones reales de `why`:
@@ -50,7 +50,7 @@ En la columna evidencia, guardar el nombre y valor de los campos usados, sin con
 | ID estable | Condición sobre entradas V5 | Nivel/efecto | Evidencia | Motivo |
 | --- | --- | --- | --- | --- |
 | C1 | `danger === 'Sí'` | critico | danger | Se declaró peligro inmediato. |
-| C2 | `hazard === 'Personas atrapadas'`, incluso si danger discrepa | critico | hazard, danger | Se reportaron personas atrapadas. |
+| C2 | `danger === 'Sí'` y `hazard === 'Personas atrapadas'` | critico | hazard, danger | Se reportaron personas atrapadas. |
 | C3 | danger Sí y hazard en derrumbe/deslizamiento, actividad volcánica o terremoto/temblor | critico | danger, hazard | Se declaró un evento grave con peligro inmediato para personas. |
 | A1 | `waiting === 'No podemos esperar'` | alto | waiting | Se indicó que la ayuda no puede esperar. |
 | A2 | Necesidad contextual de refugio y why `No tenemos dónde` o `Tenemos un lugar inseguro` | alto | needs, topNeed, why | Se reportó falta de refugio seguro. |
@@ -58,18 +58,18 @@ En la columna evidencia, guardar el nombre y valor de los campos usados, sin con
 | A4 | Necesidad contextual de salud y why `No puede esperar` o `Puede esperar algunas horas` | alto | needs, topNeed, why | Se solicitó atención de salud que requiere coordinación prioritaria. |
 | A5 | `danger === 'No sé'` | alto + verificación | danger | No se pudo descartar peligro inmediato. |
 | A6 | why `Es urgente`, `Se acabó lo que necesitamos` o `Queda muy poco`; o motivo específico severo sin contexto inequívoco | alto | needs, topNeed, why | Se declaró una necesidad severa cuya atención debe revisarse. |
-| A7 | danger ausente; o en normal needs vacío o waiting null/`No sé`; o hazard grave seleccionado con danger distinto de Sí | alto + verificación | Campos faltantes o hazard/danger | Faltan datos para descartar urgencia o aclarar el evento declarado. |
+| A7 | danger ausente; o en normal needs vacío o waiting null/`No sé` | alto + verificación | Campos faltantes | Faltan datos para descartar urgencia o aclarar el evento declarado. |
 | M1 | Ninguna C ni A activa | medio | danger, needs, waiting y why disponibles | No hay indicadores conocidos de prioridad crítica o alta en las respuestas actuales. |
 | V1 | unknownNeighborhood true o sin location válido de catálogo | Marca transversal | unknownNeighborhood, location, presencia de referencia | La ubicación necesita verificación. |
-| V2 | Cantidad de personas desconocida; o why `No sé`; o needs incluye `No sé todavía`; o hazard `Otro peligro / No sé` | Marca transversal | Campo y valor incierto | Hay información declarada como desconocida. |
-| V3 | Dato inválido o contradicción: danger No con hazard no nulo; who Solo a mí con personas >1; motivo severo con waiting Más de 24 horas | Marca transversal y error si inválido | Pares de campos contradictorios o campo inválido | Hay datos que deben aclararse sin rebajar la alerta. |
+| V2 | Cantidad de personas desconocida; o why `No sé`; o needs incluye `No sé todavía`; o danger Sí y hazard `Otro peligro / No sé` | Marca transversal | Campo y valor incierto | Hay información declarada como desconocida. |
+| V3 | Dato inválido o contradicción: danger distinto de Sí con hazard no nulo (selección abandonada); who Solo a mí con personas >1; motivo severo con waiting Más de 24 horas | Marca transversal y error si inválido | Pares de campos contradictorios o campo inválido | Hay datos que deben aclararse sin rebajar la alerta. Para hazard abandonado: Se eligió un peligro y luego se cambió la respuesta sobre peligro inmediato |
 | V4 | Motivo específico sin necesidad contextual inequívoca o motivo incompatible con su necesidad | Marca transversal | needs, topNeed, why | Falta aclarar a qué necesidad corresponde el motivo. |
 | V5 | Faltante relevante según ruta, incluyendo hazard ausente en urgente | Marca transversal | Rutas de campos faltantes | Faltan respuestas relevantes para interpretar el reporte. |
 | S1 | Personas válidas >1 o who `A varias familias` | Sin cambio de nivel | personas normalizadas, who | Se declaró afectación de un grupo; la cantidad no reemplaza las alertas vitales. |
 
 «Motivo específico severo» significa exactamente `No tenemos dónde`, `Tenemos un lugar inseguro`, `Ya se acabó`, `Ya se acabaron`, `No puede esperar`, `Puede esperar algunas horas`. Si tiene contexto inequívoco aplican A2/A3/A4; si no, A6 y V4. No interpretar texto libre para inferir atrapamientos, colapso o diagnósticos. No sé sobre waiting se cubre por A7; No sé sobre danger se cubre por A5. No sé sobre un detalle opcional puede coexistir con medio y verificación cuando sí se descartó peligro y no hay otra señal alta.
 
-La categoría por sí sola no prueba exposición humana actual. C3 exige danger Sí; cuando falta esa afirmación se aplica A7 y revisión. C2 conserva cautela ante atrapamiento incluso con una contradicción. No se exige un mínimo de personas para C1–C3. «Queda poca» agua o «Quedan pocos» alimentos sin otra señal urgente no equivalen por sí solos a agotamiento; no se inventa una cantidad disponible.
+La categoría por sí sola no prueba exposición humana actual. El hazard solo cuenta cuando danger === 'Sí', igual que buildPayload() de V5. V5 conserva state.hazard al volver atrás y cambiar danger a No o No sé: ese hazard abandonado no activa C2, C3 ni A7 y solo añade V3 con motivo 'Se eligió un peligro y luego se cambió la respuesta sobre peligro inmediato'. Las demás respuestas se evalúan normalmente, incluido A5 para danger No sé. No se exige un mínimo de personas para C1–C3. «Queda poca» agua o «Quedan pocos» alimentos sin otra señal urgente no equivalen por sí solos a agotamiento; no se inventa una cantidad disponible.
 
 No se usan barrios críticos, capas GIS no entregadas, ubicación precisa inferida de comercios o la estación Wi-Fi. No se infiere vulnerabilidad por barrio ni por cantidad de personas. `apoyos` ayuda a coordinar, pero no revela automáticamente una condición médica ni altera la prioridad por sí solo. Familias es una señal cualitativa; jamás multiplicar personas por familias ni inventar un número de hogares.
 
@@ -108,8 +108,8 @@ Datos ficticios. Base B para abreviar: danger `No`, hazard null, needs `[Agua po
 | 12 | needs [Apoyo en salud], why Puede esperar algunas horas, waiting Dentro de las próximas 24 horas | alto | false | A4 |
 | 13 | waiting Dentro de las próximas 24 horas; resto B | medio | false | M1 |
 | 14 | waiting No sé; resto B | alto | true | A7 |
-| 15 | danger No, hazard Personas atrapadas | critico | true | C2, V3 |
-| 16 | danger No, hazard Derrumbe o deslizamiento | alto | true | A7, V3 |
+| 15 | danger No, hazard Personas atrapadas abandonado al cambiar respuesta | medio | true | M1, V3 |
+| 16 | danger No, hazard Derrumbe o deslizamiento abandonado al cambiar respuesta | medio | true | M1, V3 |
 | 17 | danger Sí, hazard Otro peligro / No sé, personas null, needs [], waiting null | critico | true | C1, V2 |
 | 18 | B con personas 100 y who A varias familias | medio | false | M1, S1 |
 | 19 | B con needs [No sé todavía], personas null | medio | true | M1, V2 |
