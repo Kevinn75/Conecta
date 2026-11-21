@@ -10,14 +10,19 @@ enum TipoMensaje : uint8_t {
     MSG_LATIDO     = 0x04  // Estado de torre en linea para el mapa del PMU
 };
 
-// Categorias cerradas de emergencia
+// Categorias cerradas de emergencia (alineadas con Protocolo v1 y tablero PMU)
 enum CategoriaEmergencia : uint8_t {
     CAT_ATRAPADAS     = 1,
     CAT_DESLIZAMIENTO = 2,
     CAT_COLAPSO       = 3,
     CAT_HERIDOS       = 4,
     CAT_GAS_ELECTRICO = 5,
-    CAT_NECESIDADES   = 6
+    CAT_NECESIDADES   = 6,
+    CAT_TERREMOTO     = 7,
+    CAT_VOLCANICA     = 8,
+    CAT_DONACIONES    = 9,
+    CAT_INVENTARIOS   = 10,
+    CAT_ENTREGAS      = 11
 };
 
 // Estructura empaquetada para transmision directa por ESP-NOW (limite v1: 250 bytes)
