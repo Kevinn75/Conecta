@@ -63,8 +63,38 @@ class EstadoBackendV7:
         self._mensajes: list[dict] = []
         self._ultimos_latidos: dict[str, dict] = {}
         self._seen_mids: set[str] = set()
+        self._reportes_activos: set[str] = set()
         self._subs: list[queue.Queue[str]] = []
         self._seq = 0
+        self._metricas = {
+            "paquetesRecibidos": 0,
+            "incidentesUnicos": 0,
+            "actualizacionesConsenso": 0,
+            "duplicadosDescartados": 0,
+        }
+
+    def existe_reporte(self, id_reporte: str) -> bool:
+        with self._lock:
+            return id_reporte in self._reportes_activos
+
+    def registrar_metricas_esp(self, duplicado: bool = False, consenso: bool = False, nuevo: bool = False) -> None:
+        with self._lock:
+            self._metricas["paquetesRecibidos"] += 1
+            if duplicado:
+                self._metricas["duplicadosDescartados"] += 1
+            if consenso:
+                self._metricas["actualizacionesConsenso"] += 1
+            if nuevo:
+                self._metricas["incidentesUnicos"] += 1
+
+    def obtener_metricas(self) -> dict:
+        with self._lock:
+            m = dict(self._metricas)
+            redundantes = m["actualizacionesConsenso"] + m["duplicadosDescartados"]
+            m["tasaConsolidacionPct"] = round(
+                100.0 * redundantes / redundantes, 1
+            ) if redundantes > 0 else 100.0
+            return m
 
     def _next_mid(self, prefix: str = "srv") -> str:
         self._seq += 1
@@ -132,9 +162,16 @@ class EstadoBackendV7:
                     self._ultimos_latidos[tower] = msg
             else:
                 self._mensajes.append(msg)
+                p = msg.get("payload")
+                if isinstance(p, dict) and p.get("idReporte"):
+                    self._reportes_activos.add(str(p["idReporte"]))
 
             self._broadcast_locked(msg)
             return msg
+
+    def es_mid_duplicado(self, mid: str) -> bool:
+        with self._lock:
+            return mid in self._seen_mids
 
     def registrar_latido(self, tower_id: str, source: str = "esp", extra: dict | None = None) -> dict:
         ahora_ms = int(time.time() * 1000)
@@ -167,6 +204,9 @@ class EstadoBackendV7:
             self._mensajes.clear()
             self._ultimos_latidos.clear()
             self._seen_mids.clear()
+            self._reportes_activos.clear()
+            for k in self._metricas:
+                self._metricas[k] = 0
 
 
 ESTADO = EstadoBackendV7()
@@ -234,6 +274,7 @@ def procesar_paquete_esp(raw: dict) -> None:
 
         mask = int(raw.get("necesidadesMask") or 0)
         codigo = int(raw.get("codigo") or 0)
+        confirmaciones = max(1, int(raw.get("confirmaciones") or 1))
         ubicacion_txt = str(raw.get("ubicacion") or "").strip()
         referencia = str(raw.get("referencia") or "").strip()
         hace_tiempo = str(raw.get("haceTiempo") or "").strip()
@@ -246,8 +287,15 @@ def procesar_paquete_esp(raw: dict) -> None:
         )
 
         id_reporte = f"MZL-{codigo:03d}" if codigo > 0 else f"{torre}-{ahora_ms % 100000}"
-        # mid determinista por (torre, codigo) para evitar duplicados si se reintenta el mismo paquete
-        mid = f"esp-{torre}-{id_reporte}" if codigo > 0 else f"esp-{id_reporte}-{ahora_ms}"
+        # mid incluye confirmaciones: reenvio identico se descarta; nueva corroboracion actualiza el incidente
+        mid = f"esp-{torre}-{id_reporte}-c{confirmaciones}" if codigo > 0 else f"esp-{id_reporte}-{ahora_ms}"
+        if ESTADO.es_mid_duplicado(mid):
+            ESTADO.registrar_metricas_esp(duplicado=True)
+            print(f"[PMU-DEDUP] Paquete repetido descartado: {id_reporte} (conf={confirmaciones})", flush=True)
+            return
+
+        ya_existe = ESTADO.existe_reporte(id_reporte)
+        tipo_evento = "report.update" if (ya_existe or confirmaciones > 1) else "report.new"
 
         payload = {
             "idReporte": id_reporte,
@@ -258,6 +306,7 @@ def procesar_paquete_esp(raw: dict) -> None:
             "referencia": referencia or None,
             "observado": decodificar_tiempo(hace_tiempo),
             "personas": personas,
+            "confirmaciones": confirmaciones,
             "necesidades": decodificar_necesidades(mask),
             "prioridad": {"top": None, "motivo": None, "espera": espera},
             "apoyos": [],
@@ -266,13 +315,15 @@ def procesar_paquete_esp(raw: dict) -> None:
         }
         mensaje = {
             "mid": mid,
-            "type": "report.new",
+            "type": tipo_evento,
             "at": ahora_ms,
             "payload": payload,
         }
         ESTADO.registrar_mensaje(mensaje)
+        ESTADO.registrar_metricas_esp(consenso=ya_existe, nuevo=(not ya_existe))
+        etiqueta = "CONSENSO" if ya_existe else "REPORTE"
         print(
-            f"[PMU <- ESP] REPORTE {id_reporte} | torre={torre} | cat={categoria} | ubic={ubicacion_txt or barrio_id} | pers={personas if personas is not None else 's/d'}",
+            f"[PMU <- ESP] {etiqueta} {id_reporte} | torre={torre} | cat={categoria} | conf={confirmaciones} | urg={urgencia} | pers={personas if personas is not None else 's/d'}",
             flush=True,
         )
 
@@ -355,6 +406,10 @@ class PMUHandler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             sin_torres = qs.get("sin_torres", ["0"])[0] in ("1", "true", "yes")
             self._send_json(HTTPStatus.OK, ESTADO.obtener_historial(sin_torres=sin_torres))
+            return
+
+        if path == "/api/metricas":
+            self._send_json(HTTPStatus.OK, ESTADO.obtener_metricas())
             return
 
         # Servir archivos estaticos del PMU (pmu.html, config.js)

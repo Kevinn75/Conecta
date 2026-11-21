@@ -306,12 +306,13 @@ function resolvePlace(u,tower){
   const txt=norm(u&&(u.nombre||u.texto));if(txt&&BYNAME[txt])return BYNAME[txt][0];
   const t=TOWERS.find(x=>x.id===tower);return{id:'torre-'+(t?t.id:'?'),nombre:(u&&(u.texto||u.nombre))||('Zona de la torre '+(t?t.id:'?')),ll:t?t.ll:ZONES['Cumanday'],zona:'Sin catalogar',tipo:'Ubicación escrita',municipio:'Manizales'}}
 function ingestReport(p,origin,quiet){
-  if(!p||!p.idReporte)return;const exists=S.reports[p.idReporte];
+  if(!p||!p.idReporte)return;const exists=S.reports[p.idReporte];const prevConf=exists?(Number(exists.payload&&exists.payload.confirmaciones)||1):0;
   const pl=resolvePlace(p.ubicacion,p.torre);const cat=CATS[p.categoria]?p.categoria:'necesidades';
   const r=Object.assign(exists||{status:'activo',receivedAt:now(),dispatch:[]},{id:p.idReporte,cat,payload:p,place:pl,placeKey:pl.id,ll:pl.ll,tower:p.torre||null,origin});
   S.reports[r.id]=r;const t=TOWERS.find(x=>x.id===r.tower);if(t&&!quiet){t.lastSeen=Math.max(t.lastSeen,now());hitStar(t)}
-  audit(`${exists?'Actualización':'Reporte'} ${r.id} · ${CATS[cat].n} · ${pl.nombre} (${origin})`);
+  audit(`${exists?'Actualización':'Reporte'} ${r.id} · ${CATS[cat].n} · ${pl.nombre} (${origin})${(p.confirmaciones||1)>1?` · ${p.confirmaciones} conf.`:''}`);
   if(!exists&&!quiet){toast(`Nuevo reporte: ${CATS[cat].n} en ${pl.nombre}`);BRIDGE.send({type:'report.ack',id:r.id,at:now()})}
+  else if(exists&&!quiet&&(Number(p.confirmaciones)||1)>prevConf){toast(`Consenso (${p.confirmaciones} vecinos): ${CATS[cat].n} en ${pl.nombre}`)}
   renderWaves();renderPanel();updateLegend()}
 function activeReports(){return Object.values(S.reports).filter(r=>r.status==='activo'||r.status==='en_atencion')}
 function hitStar(t){const el=t.mk.el;el.classList.remove('hit');void el.offsetWidth;el.classList.add('hit')}
@@ -320,7 +321,7 @@ const WAVES={};    // clave lugar|categoría → {el, n}
 function renderWaves(){
   const groups={};activeReports().forEach(r=>{if(!S.catOn[r.cat])return;const k=r.placeKey+'|'+r.cat;(groups[k]=groups[k]||{ll:r.ll,cat:r.cat,list:[]}).list.push(r)});
   Object.keys(WAVES).forEach(k=>{if(!groups[k]){WAVES[k].el.remove();delete WAVES[k]}});
-  Object.entries(groups).forEach(([k,g])=>{const n=g.list.length;let w=WAVES[k];
+  Object.entries(groups).forEach(([k,g])=>{const n=g.list.reduce((acc,r)=>acc+Math.max(1,Number(r.payload&&r.payload.confirmaciones)||1),0);let w=WAVES[k];
     if(!w||w.n!==n){if(w)w.el.remove();const c=CATS[g.cat].c;const rings=Math.min(5,2+Math.floor(n/2)),s=80+Math.min(n,12)*20,d=Math.max(1.1,2.6-Math.min(n,10)*0.15),bw=2+Math.min(n,8)*0.6;
       const el=document.createElement('div');el.className='wave';el.style.cssText=`--c:${c};--s:${s}px;--d:${d}s;--w:${bw}px`;
       for(let i=0;i<rings;i++){const sp=document.createElement('span');sp.className='ring';sp.style.animationDelay=(i*d/rings)+'s';el.appendChild(sp)}
@@ -373,6 +374,7 @@ function flagTab(t){const b=document.querySelector(`[data-tab="${t}"]`);b.textCo
 const can=a=>a==='view'||S.role!=='lectura';
 const ST_LBL={activo:'Activo',en_atencion:'En atención',atendido:'Atendido',duplicado:'Duplicado'};
 function prio(r){const p=r.payload;let s=CATS[r.cat].em?60:20;if(p.ruta==='urgente')s+=25;if(p.prioridad&&/No podemos/.test(p.prioridad.espera||''))s+=10;s+=Math.min(15,(Number(p.personas)||0));
+  const conf=Math.max(1,Number(p.confirmaciones)||1);s+=Math.min(25,(conf-1)*8);
   const same=activeReports().filter(x=>x.placeKey===r.placeKey&&x.cat===r.cat).length;return s+Math.min(20,same*2)}
 function reportCard(r){const p=r.payload,c=CATS[r.cat],sel=S.sel===r.id;const showContact=S.role!=='lectura';
   let priv='';if(sel){const bits=[];
@@ -387,7 +389,7 @@ function reportCard(r){const p=r.payload,c=CATS[r.cat],sel=S.sel===r.id;const sh
     ${p.referencia?`<div><span class="k">Referencia:</span> ${esc(p.referencia)}</div>`:''}${priv}${r.reclamo?`<div class="priv" style="background:#fff7ed;border-color:#f59e0b"><b>Reclamo en trámite</b> (${esc(r.reclamo.tipo)}) · recibido ${hhmm(r.reclamo.recibido)} · responder en máximo 15 días hábiles (Ley 1581, art. 15). No modificar ni borrar el dato en discusión hasta resolver.${r.reclamo.texto?'<br>'+esc(r.reclamo.texto):''}</div>`:''}
     ${r.dispatch.map(m=>`<div class="msg"><b>→ ${esc(m.to)}</b> (${m.dist.toFixed(1)} km) · ${esc(m.estado)}</div>`).join('')}`:'';
   const act=can('act')&&(r.status==='activo'||r.status==='en_atencion');
-  return `<div class="card ${sel?'sel':''}" data-rid="${esc(r.id)}"><div class="top"><span class="badge" style="background:${c.c}">${esc(c.n)}</span><span class="pill">${ST_LBL[r.status]}</span><span class="pill">P${prio(r)}</span>${r.reclamo?'<span class="badge" style="background:#92400e">Reclamo en trámite</span>':''}</div>
+  return `<div class="card ${sel?'sel':''}" data-rid="${esc(r.id)}"><div class="top"><span class="badge" style="background:${c.c}">${esc(c.n)}</span><span class="pill">${ST_LBL[r.status]}</span><span class="pill">P${prio(r)}</span>${(Number(p.confirmaciones)||1)>=2?`<span class="pill" style="background:#dcfce7;color:#166534">✓ ${esc(p.confirmaciones)} conf.</span>`:''}${r.reclamo?'<span class="badge" style="background:#92400e">Reclamo en trámite</span>':''}</div>
    <div class="t">${esc(r.place.nombre)}</div><div class="k">${esc(r.id)} · ${hhmm(r.receivedAt)} · ${r.tower?'Torre '+esc(r.tower):esc(r.origin)} · ${p.personas!=null?esc(p.personas)+' pers.':'personas s/d'}</div>${det}
    ${act?`<div class="row"><button class="btn primary" data-act="dispatch" data-id="${esc(r.id)}">Despachar entidad más cercana</button></div>
    <div class="row"><button class="btn" data-act="atendido" data-id="${esc(r.id)}">Marcar atendido</button><button class="btn danger" data-act="duplicado" data-id="${esc(r.id)}">Duplicado</button></div>`:''}</div>`}

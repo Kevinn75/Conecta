@@ -1,4 +1,5 @@
 #include "Servidor.h"
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,6 +22,20 @@ void copiarCadenaSegura(char* destino, size_t tamDestino, const char* origen) {
     strncpy(destino, origen, tamDestino - 1);
     destino[tamDestino - 1] = '\0';
 }
+
+uint32_t hashTextoNormalizado(const char* texto) {
+    uint32_t h = 2166136261u;
+    if (texto == nullptr) return 0;
+    bool tuvoCaracter = false;
+    while (*texto) {
+        unsigned char c = static_cast<unsigned char>(*texto++);
+        if (isspace(c)) continue;
+        h ^= static_cast<uint8_t>(tolower(c));
+        h *= 16777619u;
+        tuvoCaracter = true;
+    }
+    return tuvoCaracter ? (h | 0x80000000u) : 0u;
+}
 } // namespace
 
 ServidorHotspot::ServidorHotspot()
@@ -36,6 +51,20 @@ uint32_t ServidorHotspot::hashFnv1a(const char* texto) {
         h *= 16777619u;
     }
     return h;
+}
+
+uint32_t ServidorHotspot::calcularLlaveUbicacion(uint16_t barrioId, const char* ubicacion, const char* referencia) {
+    if (barrioId > 0) {
+        return static_cast<uint32_t>(barrioId);
+    }
+    if (ubicacion != nullptr && ubicacion[0] != '\0') {
+        return hashTextoNormalizado(ubicacion);
+    }
+    if (referencia != nullptr && referencia[0] != '\0') {
+        return hashTextoNormalizado(referencia);
+    }
+    // Zona desconocida sin referencia: 0 indica no agrupar automaticamente
+    return 0;
 }
 
 bool ServidorHotspot::buscarDuplicado(uint32_t hashId, uint16_t& codigoExistente) const {
@@ -56,10 +85,132 @@ void ServidorHotspot::registrarHash(uint32_t hashId, uint16_t codigo) {
     _indiceHistorial = (_indiceHistorial + 1) % HISTORIAL_IDEMPOTENCIA;
 }
 
+bool ServidorHotspot::excedeRateLimitIp(uint32_t ip, unsigned long ahoraMs, bool esPeligroVital) {
+    // Regla humanitaria / Habeas Data: peligro vital nunca se bloquea silenciosamente por rate limit
+    if (ip == 0 || esPeligroVital) return false;
+
+    for (size_t i = 0; i < MAX_CLIENTES_IP; ++i) {
+        if (_clientesIp[i].ip == ip) {
+            if (ahoraMs - _clientesIp[i].inicioVentanaMs >= VENTANA_RATE_LIMIT_MS) {
+                _clientesIp[i].inicioVentanaMs = ahoraMs;
+                _clientesIp[i].conteoVentana = 0;
+                return false;
+            }
+            return (_clientesIp[i].conteoVentana >= MAX_REPORTES_POR_IP);
+        }
+    }
+    return false;
+}
+
+void ServidorHotspot::registrarEnvioIp(uint32_t ip, unsigned long ahoraMs) {
+    if (ip == 0) return;
+
+    size_t libre = MAX_CLIENTES_IP;
+    size_t masViejo = 0;
+    unsigned long menorTiempo = 0xFFFFFFFFUL;
+
+    for (size_t i = 0; i < MAX_CLIENTES_IP; ++i) {
+        if (_clientesIp[i].ip == ip) {
+            if (ahoraMs - _clientesIp[i].inicioVentanaMs >= VENTANA_RATE_LIMIT_MS) {
+                _clientesIp[i].inicioVentanaMs = ahoraMs;
+                _clientesIp[i].conteoVentana = 1;
+            } else {
+                _clientesIp[i].conteoVentana++;
+            }
+            return;
+        }
+        if (_clientesIp[i].ip == 0 && libre == MAX_CLIENTES_IP) {
+            libre = i;
+        }
+        if (_clientesIp[i].inicioVentanaMs < menorTiempo) {
+            menorTiempo = _clientesIp[i].inicioVentanaMs;
+            masViejo = i;
+        }
+    }
+
+    size_t idx = (libre < MAX_CLIENTES_IP) ? libre : masViejo;
+    _clientesIp[idx].ip = ip;
+    _clientesIp[idx].inicioVentanaMs = ahoraMs;
+    _clientesIp[idx].conteoVentana = 1;
+}
+
+ServidorHotspot::IncidenteActivo* ServidorHotspot::buscarIncidenteActivo(
+    uint32_t llaveUbic,
+    uint8_t categoria,
+    unsigned long ahoraMs
+) {
+    if (llaveUbic == 0) return nullptr;
+
+    for (size_t i = 0; i < MAX_INCIDENTES_ACTIVOS; ++i) {
+        if (!_incidentes[i].activo) continue;
+        if (ahoraMs - _incidentes[i].ultimaActividadMs > VENTANA_CONSENSO_MS) {
+            _incidentes[i].activo = false;
+            continue;
+        }
+        if (_incidentes[i].llaveUbicacion == llaveUbic && _incidentes[i].categoria == categoria) {
+            return &_incidentes[i];
+        }
+    }
+    return nullptr;
+}
+
+ServidorHotspot::IncidenteActivo* ServidorHotspot::crearIncidenteActivo(
+    const PaqueteConecta& pkt,
+    uint32_t llaveUbic,
+    uint32_t ip,
+    unsigned long ahoraMs
+) {
+    if (llaveUbic == 0) return nullptr;
+
+    size_t libre = MAX_INCIDENTES_ACTIVOS;
+    size_t masViejo = 0;
+    unsigned long menorTiempo = 0xFFFFFFFFUL;
+
+    for (size_t i = 0; i < MAX_INCIDENTES_ACTIVOS; ++i) {
+        if (!_incidentes[i].activo || (ahoraMs - _incidentes[i].ultimaActividadMs > VENTANA_CONSENSO_MS)) {
+            if (libre == MAX_INCIDENTES_ACTIVOS) libre = i;
+        }
+        if (_incidentes[i].ultimaActividadMs < menorTiempo) {
+            menorTiempo = _incidentes[i].ultimaActividadMs;
+            masViejo = i;
+        }
+    }
+
+    size_t idx = (libre < MAX_INCIDENTES_ACTIVOS) ? libre : masViejo;
+    IncidenteActivo& inc = _incidentes[idx];
+    inc = {};
+    inc.activo            = true;
+    inc.llaveUbicacion    = llaveUbic;
+    inc.categoria         = pkt.categoria;
+    inc.codigo            = pkt.codigo;
+    inc.confirmaciones    = 1;
+    inc.urgencia          = pkt.urgencia;
+    inc.afectados         = pkt.afectados;
+    inc.necesidadesMask   = pkt.necesidadesMask;
+    inc.ultimaActividadMs = ahoraMs;
+    agregarIpIncidente(inc, ip);
+    return &inc;
+}
+
+bool ServidorHotspot::ipYaVoto(const IncidenteActivo& inc, uint32_t ip) {
+    if (ip == 0) return false;
+    for (uint8_t i = 0; i < inc.numIps && i < MAX_IPS_POR_INCIDENTE; ++i) {
+        if (inc.ipsVotantes[i] == ip) return true;
+    }
+    return false;
+}
+
+void ServidorHotspot::agregarIpIncidente(IncidenteActivo& inc, uint32_t ip) {
+    if (ip == 0 || ipYaVoto(inc, ip)) return;
+    if (inc.numIps < MAX_IPS_POR_INCIDENTE) {
+        inc.ipsVotantes[inc.numIps++] = ip;
+    }
+}
+
 void ServidorHotspot::iniciar(uint8_t canalWiFi) {
     _canalWiFi = canalWiFi;
 
-    // 1. Montar sistema de archivos LittleFS (donde viven index.html, styles.css, app.js y reportes.jsonl)
+    // 1. Montar sistema de archivos LittleFS (donde viven index.html y reportes.jsonl)
     if (!LittleFS.begin(true)) {
         Serial.println("[ERROR] Fallo al montar LittleFS");
     } else {
@@ -145,22 +296,34 @@ void ServidorHotspot::configurarRutas() {
     _server.on("/connecttest.txt", HTTP_GET, forzarRedireccion);
     _server.on("/redirect", HTTP_GET, forzarRedireccion);
 
-    // 3. Estado de la estacion para el frontend ciudadano
+    // 3. Estado y metricas KPI de Edge Computing (deduplicacion + consenso)
     _server.on("/api/estado", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        char resp[160];
+        uint32_t filtrados = _duplicadosBloqueados + _agrupadosConsenso;
+        uint32_t redundantes = (_totalRecibidos > _incidentesUnicos) ? (_totalRecibidos - _incidentesUnicos) : 0;
+        float tasa = (redundantes > 0) ? (100.0f * static_cast<float>(filtrados) / static_cast<float>(redundantes)) : 100.0f;
+        if (tasa > 100.0f) tasa = 100.0f;
+
+        char resp[280];
         snprintf(
             resp,
             sizeof(resp),
-            "{\"estacion\":\"%s\",\"canal\":%u,\"clientes\":%d,\"totalReportes\":%lu}",
+            "{\"estacion\":\"%s\",\"canal\":%u,\"clientes\":%d,\"recibidos\":%lu,"
+            "\"incidentesUnicos\":%lu,\"agrupadosConsenso\":%lu,\"duplicadosBloqueados\":%lu,"
+            "\"bloqueadosRateLimit\":%lu,\"tasaDeteccionPct\":%.1f}",
             ID_ESTACION,
             _canalWiFi,
             WiFi.softAPgetStationNum(),
-            static_cast<unsigned long>(_totalReportes)
+            static_cast<unsigned long>(_totalRecibidos),
+            static_cast<unsigned long>(_incidentesUnicos),
+            static_cast<unsigned long>(_agrupadosConsenso),
+            static_cast<unsigned long>(_duplicadosBloqueados),
+            static_cast<unsigned long>(_bloqueadosRateLimit),
+            tasa
         );
         request->send(200, "application/json", resp);
     });
 
-    // 4. Endpoint POST para recibir reportes JSON del formulario ciudadano y enviarlos por ESP-NOW
+    // 4. Endpoint POST con motor Edge: Idempotencia + Rate Limit IP + Consenso (3 llaves)
     _server.on(
         "/api/reporte",
         HTTP_POST,
@@ -196,7 +359,13 @@ void ServidorHotspot::configurarRutas() {
                 return;
             }
 
-            // Idempotencia: usa id textual, hashDispositivo o codigo de 16 bits del frontend
+            const unsigned long ahoraMs = millis();
+            const IPAddress ipObj = (request->client() != nullptr) ? request->client()->remoteIP() : IPAddress(0, 0, 0, 0);
+            const uint32_t ipCliente = static_cast<uint32_t>(ipObj);
+
+            _totalRecibidos++;
+
+            // A) Idempotencia por id textual, hashDispositivo o codigo de 16 bits del frontend
             const char* idCliente = doc["id"] | "";
             uint16_t codigoEntrada = doc["codigo"] | 0;
             uint32_t hashId = 0;
@@ -210,7 +379,14 @@ void ServidorHotspot::configurarRutas() {
 
             uint16_t codigoExistente = 0;
             if (buscarDuplicado(hashId, codigoExistente)) {
-                char dupResp[176];
+                _duplicadosBloqueados++;
+                Serial.printf(
+                    "[EDGE-DEDUP] Reintento duplicado bloqueado (IP=%s | codigo=MZL-%03u) | Filtrados=%lu\n",
+                    ipObj.toString().c_str(),
+                    codigoExistente,
+                    static_cast<unsigned long>(_duplicadosBloqueados)
+                );
+                char dupResp[192];
                 snprintf(
                     dupResp,
                     sizeof(dupResp),
@@ -223,17 +399,17 @@ void ServidorHotspot::configurarRutas() {
                 return;
             }
 
+            // B) Parseo del paquete candidato
             PaqueteConecta pkt = {};
             pkt.tipo            = MSG_REPORTE;
             copiarCadenaSegura(pkt.estacion, sizeof(pkt.estacion), ID_ESTACION);
             pkt.barrioId        = doc["barrioId"] | 0;
-            pkt.confirmaciones  = doc["confirmaciones"] | 1;
+            pkt.confirmaciones  = 1;
             pkt.bateriaPct      = doc["bateriaPct"] | 100;
             pkt.saltos          = 0;
-            pkt.ts              = doc["ts"] | static_cast<uint32_t>(millis() / 1000);
+            pkt.ts              = doc["ts"] | static_cast<uint32_t>(ahoraMs / 1000);
             pkt.hashDispositivo = hashId;
 
-            // Personas afectadas: 0 significa desconocido ("personas s/d" en PMU), rango 0..255
             int personas = 0;
             if (!doc["afectados"].isNull()) {
                 personas = doc["afectados"] | 0;
@@ -244,11 +420,9 @@ void ServidorHotspot::configurarRutas() {
             if (personas > 255) personas = 255;
             pkt.afectados = static_cast<uint8_t>(personas);
 
-            // Tiempo aproximado desde inicio ("10", "15", "30", "mas_60") si viene en el JSON
             const char* tiempoStr = doc["hace_aproximadamente"] | "";
             copiarCadenaSegura(pkt.haceTiempo, sizeof(pkt.haceTiempo), tiempoStr);
 
-            // Urgencia (3=critico, 2=alto, 1=medio)
             bool peligroInmediato = doc["peligro_inmediato"] | false;
             if (!doc["urgencia"].isNull()) {
                 int u = doc["urgencia"] | 2;
@@ -263,8 +437,6 @@ void ServidorHotspot::configurarRutas() {
                 pkt.urgencia = 1;
             }
 
-            // Soporta formato numerico del frontend final (tipo:1 + categoria + necesidadesMask)
-            // y tambien formato textual previo (tipo:"agua"|"alimentos"|...)
             if (doc["tipo"].is<const char*>()) {
                 const char* tipoForm = doc["tipo"] | "";
                 if (strcmp(tipoForm, "agua") == 0) {
@@ -290,13 +462,124 @@ void ServidorHotspot::configurarRutas() {
                 pkt.necesidadesMask = doc["necesidadesMask"] | 0;
             }
 
-            // Ubicacion textual opcional y referencia/detalle (sin datos personales)
             const char* ubicacionStr = doc["ubicacion"] | "";
             const char* detalleStr = !doc["referencia"].isNull() ? (doc["referencia"] | "") : (doc["detalle"] | "");
             copiarCadenaSegura(pkt.ubicacion, sizeof(pkt.ubicacion), ubicacionStr);
             copiarCadenaSegura(pkt.referencia, sizeof(pkt.referencia), detalleStr);
 
-            // Usa el codigo de 16 bits enviado por el frontend, o asigna uno secuencial
+            const bool esPeligroVital = (pkt.urgencia >= 3 || pkt.categoria == CAT_ATRAPADAS);
+            const uint32_t llaveUbic = calcularLlaveUbicacion(pkt.barrioId, pkt.ubicacion, pkt.referencia);
+
+            // C) Evaluar Regla de las 3 Llaves: mismo lugar + misma categoria + ventana < 20 min
+            IncidenteActivo* existente = buscarIncidenteActivo(llaveUbic, pkt.categoria, ahoraMs);
+            if (existente != nullptr) {
+                // Caso 1: La MISMA IP repite el mismo incidente -> Duplicado exacto interceptado en borde
+                if (ipYaVoto(*existente, ipCliente)) {
+                    _duplicadosBloqueados++;
+                    registrarHash(hashId, existente->codigo);
+                    Serial.printf(
+                        "[EDGE-DEDUP] Duplicado misma IP=%s (barrio=%u cat=%u -> MZL-%03u, conf=%u) | Bloqueados=%lu\n",
+                        ipObj.toString().c_str(),
+                        pkt.barrioId,
+                        pkt.categoria,
+                        existente->codigo,
+                        existente->confirmaciones,
+                        static_cast<unsigned long>(_duplicadosBloqueados)
+                    );
+                    char dupResp[208];
+                    snprintf(
+                        dupResp,
+                        sizeof(dupResp),
+                        "{\"status\":\"encolado_espnow\",\"duplicado\":true,\"estacion\":\"%s\",\"codigo\":%u,\"codigoTexto\":\"MZL-%03u\",\"confirmaciones\":%u}",
+                        ID_ESTACION,
+                        existente->codigo,
+                        existente->codigo,
+                        existente->confirmaciones
+                    );
+                    request->send(200, "application/json", dupResp);
+                    return;
+                }
+
+                // Caso 2: OTRA IP distinta confirma el mismo incidente -> Consenso + escalamiento de prioridad
+                if (excedeRateLimitIp(ipCliente, ahoraMs, esPeligroVital)) {
+                    _bloqueadosRateLimit++;
+                    _duplicadosBloqueados++;
+                    Serial.printf("[EDGE-RATELIMIT] IP=%s supero %u reportes en 5 min (HTTP 429)\n",
+                                  ipObj.toString().c_str(), MAX_REPORTES_POR_IP);
+                    request->send(429, "application/json",
+                                  "{\"status\":\"rate_limited\",\"mensaje\":\"Limite temporal: max 2 reportes cada 5 minutos por dispositivo\"}");
+                    return;
+                }
+
+                agregarIpIncidente(*existente, ipCliente);
+                registrarEnvioIp(ipCliente, ahoraMs);
+                if (existente->confirmaciones < 255) {
+                    existente->confirmaciones++;
+                }
+                // Acumula personas afectadas (tope 255) y necesidades
+                uint16_t sumaPers = static_cast<uint16_t>(existente->afectados) + static_cast<uint16_t>(pkt.afectados);
+                existente->afectados = (sumaPers > 255) ? 255 : static_cast<uint8_t>(sumaPers);
+                existente->necesidadesMask |= pkt.necesidadesMask;
+                existente->ultimaActividadMs = ahoraMs;
+
+                // Escalamiento automatico de prioridad por consenso de vecinos
+                if (pkt.urgencia > existente->urgencia) {
+                    existente->urgencia = pkt.urgencia;
+                }
+                if (existente->confirmaciones >= 3) {
+                    existente->urgencia = 3; // Critico verificado por 3+ vecinos
+                } else if (existente->confirmaciones >= 2 && existente->urgencia < 2) {
+                    existente->urgencia = 2; // Sube al menos a Alto con 2 confirmaciones
+                }
+
+                // Reutiliza el mismo codigo de incidente para actualizar la onda en el PMU sin crear tarjeta nueva
+                pkt.codigo          = existente->codigo;
+                pkt.confirmaciones  = existente->confirmaciones;
+                pkt.urgencia        = existente->urgencia;
+                pkt.afectados       = existente->afectados;
+                pkt.necesidadesMask = existente->necesidadesMask;
+
+                bool encolado = (_onReporte != nullptr) ? _onReporte(pkt) : false;
+                if (encolado) {
+                    registrarHash(hashId, pkt.codigo);
+                    _agrupadosConsenso++;
+                }
+
+                Serial.printf(
+                    "[EDGE-CONSENSO] Incidente MZL-%03u CORROBORADO por vecino #%u (IP=%s | barrio=%u | urg=%u)\n",
+                    pkt.codigo,
+                    pkt.confirmaciones,
+                    ipObj.toString().c_str(),
+                    pkt.barrioId,
+                    pkt.urgencia
+                );
+
+                char consResp[220];
+                snprintf(
+                    consResp,
+                    sizeof(consResp),
+                    "{\"status\":\"%s\",\"duplicado\":false,\"agrupado\":true,\"estacion\":\"%s\",\"codigo\":%u,\"codigoTexto\":\"MZL-%03u\",\"confirmaciones\":%u}",
+                    encolado ? "encolado_espnow" : "recibido_sin_enlace",
+                    pkt.estacion,
+                    pkt.codigo,
+                    pkt.codigo,
+                    pkt.confirmaciones
+                );
+                request->send(encolado ? 200 : 503, "application/json", consResp);
+                return;
+            }
+
+            // D) Incidente nuevo: verificar limite de tasa por IP (max 2 reportes / 5 min, salvo peligro vital)
+            if (excedeRateLimitIp(ipCliente, ahoraMs, esPeligroVital)) {
+                _bloqueadosRateLimit++;
+                _duplicadosBloqueados++;
+                Serial.printf("[EDGE-RATELIMIT] IP=%s bloqueada temporalmente (max %u/5min | HTTP 429)\n",
+                              ipObj.toString().c_str(), MAX_REPORTES_POR_IP);
+                request->send(429, "application/json",
+                              "{\"status\":\"rate_limited\",\"mensaje\":\"Limite temporal: max 2 reportes cada 5 minutos por dispositivo\"}");
+                return;
+            }
+
             if (codigoEntrada != 0) {
                 pkt.codigo = codigoEntrada;
             } else {
@@ -308,14 +591,16 @@ void ServidorHotspot::configurarRutas() {
             bool encolado = (_onReporte != nullptr) ? _onReporte(pkt) : false;
             if (encolado) {
                 registrarHash(hashId, pkt.codigo);
-                _totalReportes++;
+                registrarEnvioIp(ipCliente, ahoraMs);
+                crearIncidenteActivo(pkt, llaveUbic, ipCliente, ahoraMs);
+                _incidentesUnicos++;
             }
 
-            char respuesta[176];
+            char respuesta[208];
             snprintf(
                 respuesta,
                 sizeof(respuesta),
-                "{\"status\":\"%s\",\"duplicado\":false,\"estacion\":\"%s\",\"codigo\":%u,\"codigoTexto\":\"MZL-%03u\"}",
+                "{\"status\":\"%s\",\"duplicado\":false,\"agrupado\":false,\"estacion\":\"%s\",\"codigo\":%u,\"codigoTexto\":\"MZL-%03u\",\"confirmaciones\":1}",
                 encolado ? "encolado_espnow" : "recibido_sin_enlace",
                 pkt.estacion,
                 pkt.codigo,
@@ -361,12 +646,11 @@ void ServidorHotspot::configurarRutas() {
         }
     );
 
-    // 5. Archivos estaticos de LittleFS (styles.css, app.js, etc.)
+    // 5. Archivos estaticos de LittleFS
     _server.serveStatic("/", LittleFS, "/");
 
     // 6. Cualquier otra peticion desconocida redirige al portal
     _server.onNotFound([forzarRedireccion](AsyncWebServerRequest* request) {
-        // Si ya esta pidiendo la raiz o un archivo local, no entrar en bucle
         if (request->host() == "192.168.4.1") {
             request->send(404, "text/plain", "Archivo no encontrado");
         } else {
