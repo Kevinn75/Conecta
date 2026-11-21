@@ -1,0 +1,184 @@
+{
+ "fuente": "docs/referencia/CONECTA_redisenado_experiencia_v5.html",
+ "sha256": "9d151532a5b6b2f472e81cb867894664aeaa9a8f7fd5cc93e7947e6c5fb808a0",
+ "bloques": {
+  "autorizaciones_versionadas": {
+   "lineas": [
+    121,
+    128
+   ],
+   "fragmentos": [
+    "Autorizo a [Entidad responsable] a usar los datos de esta solicitud para coordinar la atención y la entrega de ayuda.",
+    "Autorizo a [Entidad responsable] a guardar mi nombre o alias y mi teléfono para que personal autorizado del PMU me contacte sobre este aviso.",
+    "Autorizo a [Entidad responsable] a usar el dato de salud que elija para que el equipo autorizado prepare el apoyo que solicito.",
+    "Embarazo o lactancia",
+    "Medicamentos de uso continuo",
+    "Movilidad reducida",
+    "Otra necesidad de salud (sin detalles)"
+   ]
+  },
+  "aviso_urgente_ley_1581": {
+   "lineas": [
+    167,
+    167
+   ],
+   "fragmentos": [
+    "Aviso rápido",
+    "Cuéntanos qué está pasando y dónde",
+    "¿Dónde necesitas ayuda?",
+    "Elige el peligro y describe el lugar. Puedes enviar este aviso con pocos datos.",
+    "Puedes indicar un barrio, un sitio conocido o describir dónde estás.",
+    "¿Qué está pasando?",
+    "Un punto cercano (opcional)",
+    "Describe el lugar, no a las personas: no escribas nombres ni datos de salud.",
+    "¿Cuántas personas están en peligro?",
+    "Si hay riesgo para la vida, llama al 123.",
+    "CONECTA no reemplaza la atención de emergencias.",
+    "Se usa solo para atender esta emergencia (Ley 1581, art. 10c).",
+    "Cómo se usan mis datos",
+    "¿Cuántas personas necesitan ayuda?",
+    "No sé cuántas son",
+    "Crear aviso de prueba"
+   ]
+  },
+  "inicio_avisos": {
+   "lineas": [
+    169,
+    169
+   ],
+   "fragmentos": [
+    "¿Hay alguien en peligro inmediato?",
+    "Elige una opción. Así podemos mostrarte el camino más corto.",
+    "Sí, hay peligro",
+    "Hay personas atrapadas, heridas o en una situación grave",
+    "Necesitamos ayuda, pero no hay peligro inmediato confirmado",
+    "No estoy seguro o alguien más me lo contó",
+    "Si una vida corre peligro, llama también al 123.",
+    "Este formulario es una demostración y no envía emergencias reales.",
+    "Modo demostración.",
+    "No utilices esta página para pedir ayuda real.",
+    "Cómo se usan mis datos"
+   ]
+  },
+  "revision_consentimiento": {
+   "lineas": [
+    179,
+    179
+   ],
+   "fragmentos": [
+    "Revisa antes de continuar",
+    "Este es un reporte de demostración. No se enviará a los servicios de emergencia.",
+    "Personas afectadas",
+    "Qué necesitan",
+    "Información adicional",
+    "Se puede ampliar después",
+    "Contacto y salud",
+    "Contacto autorizado.",
+    "Sin contacto.",
+    "Salud autorizada.",
+    "Sin datos de salud.",
+    "Revisión sugerida:",
+    ". Es una orientación de la demostración, no una decisión de atención.",
+    "Corregir mis respuestas",
+    "Cómo se usan mis datos",
+    "Crear reporte de prueba"
+   ]
+  },
+  "comprobante_avisos": {
+   "lineas": [
+    180,
+    180
+   ],
+   "fragmentos": [
+    "Comprobante de prueba",
+    "Reporte creado en este navegador",
+    "Este comprobante es una demostración. No confirma recepción en una estación ni en el Puesto de Mando Unificado.",
+    "No se ha solicitado ayuda real.",
+    "Si hay peligro para la vida, llama al 123.",
+    "Clave privada de prueba",
+    "Anótala ahora.",
+    "La clave ya se ocultó.",
+    "No se mostrará de nuevo y no la compartas. Permite consultar y modificar este reporte de prueba.",
+    "Estado: creado localmente.",
+    "No se ha confirmado recepción por un servidor real.",
+    "Añadir información opcional",
+    "Mis autorizaciones y mis datos (con clave)",
+    "Datos de contacto (opcional)",
+    "Ver y actualizar ayuda recibida",
+    "Simular pérdida del Wi-Fi",
+    "Iniciar un nuevo reporte"
+   ]
+  },
+  "pantallas_legales": {
+   "lineas": [
+    184,
+    207
+   ],
+   "fragmentos": [
+    "Aviso de privacidad · disponible sin internet",
+    "Cómo se usan mis datos",
+    "[Entidad responsable] · NIT [NIT] · [Dirección física] · [Teléfono] · [Correo]",
+    "coordinar la atención y la entrega de ayuda de tu reporte. No se publican, no se venden y no se usan para otros fines.",
+    "Quién recibe los datos:",
+    "personal autorizado del Puesto de Mando Unificado (PMU) y las entidades de emergencia que atienden tu caso, solo con lo necesario.",
+    "Lo que es opcional:",
+    "responder sobre salud o sobre niños, niñas y adolescentes es",
+    "siempre opcional",
+    ". Tu nombre y teléfono también.",
+    "Tus derechos (gratis):",
+    "conocer, actualizar y corregir tus datos; pedir copia de tu autorización; saber cómo se usaron; retirar tu autorización o pedir que se borren; y quejarte ante la SIC.",
+    "consultas en máximo 10 días hábiles; reclamos (corrección o borrado) en máximo 15 días hábiles.",
+    "Consultas y reclamos:",
+    "en esta página con tu código y clave, o en [Dirección o correo] · [Teléfono]. Funciona también fuera de la red de la estación.",
+    "Autoridad de protección de datos:",
+    "Superintendencia de Industria y Comercio (SIC), Delegatura para la Protección de Datos Personales. Calle 24 No. 7-43, Bogotá D.C. · Línea de atención (601) 592 0400 · Línea gratuita nacional 01 8000 910165 · www.sic.gov.co. Antes de quejarte ante la SIC, presenta tu consulta o reclamo ante [Entidad responsable].",
+    "tus datos personales se borran o se anonimizan [plazo definido en la política de tratamiento] después de cerrar el caso.",
+    "Ley 1581 de 2012 · Texto versión",
+    "Autorización opcional",
+    "¿Podemos contactarte?",
+    "Solo si lo autorizas, la entidad operadora podrá usar tu propio alias y teléfono para coordinar este aviso.",
+    "Si eres menor de edad, pide a un adulto que te acompañe. No incluyas teléfonos de otras personas.",
+    "Continuar con autorización",
+    "Continuar sin dar mis datos",
+    "Después de autorizar",
+    "¿Por quién preguntamos?",
+    "Puedes dejar tu nombre o alias y tu propio teléfono. Son opcionales.",
+    "Tu nombre o alias (opcional)",
+    "Escribe aquí",
+    "Tu teléfono (opcional)",
+    "Escribe solo tu propio contacto, no el de otras personas. Puedes retirar este permiso cuando quieras.",
+    "Guardar contacto en esta sesión",
+    "Volver sin guardar",
+    "Autorización independiente",
+    "¿Quieres contar algo sobre tu salud?",
+    "Es opcional. Puedes pedir ayuda para el traslado sin revelar ninguna condición de salud.",
+    "[Entidad responsable] guardará el dato que elijas para que el equipo autorizado prepare el apoyo que solicitas.",
+    "Elige solo lo que quieras contar sobre ti",
+    "Si reportas por terceras personas, describe el apoyo solicitado sin identificarlas por su condición. Si eres menor de edad, pide a un adulto que te acompañe.",
+    "Continuar sin compartirlo",
+    "Comprobante privado",
+    "Mis autorizaciones y mis datos",
+    "Ingresa el código y la clave privada de tu reporte.",
+    "Código del reporte",
+    "Clave privada",
+    "Demasiados intentos. Espera",
+    "Volver al comprobante",
+    "Sin autorización registrada",
+    "Acceso verificado con código y clave.",
+    "Aviso urgente (Ley 1581, art. 10c)",
+    "Ocultar historial",
+    "Ver texto y fecha de lo que autoricé",
+    "No hay autorizaciones registradas.",
+    "Solicitar corrección",
+    "Solicitar que se borre mi reporte",
+    "¿Qué se debe corregir? (máximo 200 caracteres)",
+    "Motivo (opcional, máximo 200 caracteres)",
+    "Enviar solicitud",
+    ". Respuesta en máximo",
+    "días hábiles (Ley 1581, art. 15).",
+    "Retirar autorización de contacto",
+    "Retirar autorización de salud"
+   ]
+  }
+ }
+}
