@@ -1,0 +1,40 @@
+{
+  "id": "t2-frontend-data",
+  "objective": "Primero aplicar dos correcciones de la revisión de Claude a docs/REGLAS_TRIAJE.md y docs/CONTRATO_JSON.md (solo esos cambios, conservando el resto): (1) hazard solo cuenta cuando danger==='Sí', igual que buildPayload() de V5, porque V5 conserva state.hazard si la persona vuelve atrás y cambia danger a No o No sé; en ese caso el hazard abandonado no activa C2, C3 ni A7 y solo añade la marca V3 con motivo 'Se eligió un peligro y luego se cambió la respuesta sobre peligro inmediato'; quitar 'incluso si danger discrepa' de C2 y actualizar los casos 15 y 16 y su tabla; (2) el rango de personas es 1–100000 (máximo real de los inputs de V5) en ambos documentos, incluido el campo p de LoRa. Después, Fases 1 y 2 del prompt maestro. Convertir V5 (docs/referencia/CONECTA_redisenado_experiencia_v5.html) en los archivos que se suben a LittleFS, partiendo de su código, no desde cero. Crear en data/: index.html (mismo marcado y textos de V5, enlaza recursos con rutas relativas), estilo.css (CSS de V5, se pueden quitar reglas muertas o duplicadas sin cambiar el aspecto), lugares.js (los mismos 514 lugares de PLACES+EXTRA_PLACES con id, nombre, zona, tipo, municipio y aliases, en formato compacto con diccionarios de zonas/tipos/municipios que se expande a la misma forma que V5), triaje.js y app.js. No borrar data/Data.sql. triaje.js: funciones puras y deterministas expuestas en globalThis.Triaje y en module.exports cuando exista (script clásico, sin import/export): normalizarReporte(raw) sin mutar raw; validarReporte(raw) -> {errores:[{campo,codigo,mensaje}],advertencias:[...]} aceptando null/'No sé' y rechazando personas negativas, 0, no enteras o >100000 y combinaciones incoherentes; clasificarRiesgo(raw) -> {nivel:'critico'|'alto'|'medio',requiereVerificacion,reglasActivadas,motivos,versionReglas:'triaje-2026-11-20.1',datosFaltantes} siguiendo exactamente docs/REGLAS_TRIAJE.md; construirPayload(raw,triaje) siguiendo docs/CONTRATO_JSON.md (sin hashClave ni clave privada; contacto/salud solo con autorización vigente); construirResumenRadio(payload) como estructura propuesta de buildLoraPayload sin contacto, salud ni texto libre, nunca enviada. app.js: lógica de V5 (pantallas, rutas, validación, buscador sin tildes, «No sé en qué barrio estoy», autorizaciones, historial, revocación, solicitudes del titular) usando Triaje para la revisión sugerida. Integración HTTP: objeto ConectaEnvio también exportado en module.exports para pruebas, con modo 'demo' por defecto y modo 'estacion' solo si la URL trae ?modo=estacion. En 'estacion': fetch('/api/reporte',{method:'POST'}) con ruta relativa, AbortController con el timeout de 15 s propuesto en el contrato, el mismo idReporte generado una sola vez antes del primer intento y reutilizado en reintentos, bloqueo de doble clic, manejo de JSON inválido y de errores HTTP 400/409/422/429/503. Solo se considera 'guardado' si la respuesta es 200/201 con estado==='guardado', recibidoEnEstacion===true y el mismo idReporte; cualquier otra respuesta 2xx, incluida {status:'en_espera'}, es 'sin_confirmar'. Mostrar ese estado en una línea nueva aparte, sin alterar ningún texto existente de V5, y un botón de reintento con el mismo ID. Nunca mostrar éxito por BroadcastChannel, Promise.resolve, temporizadores ni por terminar fetch. Si crypto.subtle no existe, seguir funcionando sin hash. Accesibilidad: al cambiar de pantalla mover el foco al encabezado h2 (tabindex=-1); mensajes de error con role=alert; en las pantallas legales solo se permite añadir atributos invisibles (for/id en label, role, aria-*) sin cambiar texto, CSS ni orden. Sin valores precargados en respuestas ni autorizaciones. Sin CDN, fuentes externas, analítica ni URLs absolutas (xmlns de SVG permitido). Pruebas en tests/web/: node:test con al menos 15 casos de triaje (peligro vital individual, deslizamiento con varios hogares, urgente sin ubicación, datos incompletos, necesidades múltiples, 'No sé', contradictorio, cambio de respuesta antes de enviar) y los casos: alerta vital con ubicación desconocida -> critico + requiereVerificacion; reporte sospechoso de personas atrapadas no se suprime; resumen radio sin contacto/salud/texto; 200 {status:'en_espera'} -> sin_confirmar; corte tras POST y reintento con el mismo idReporte; doble clic -> un solo POST; JSON inválido; con y sin crypto.subtle; catálogo de lugares.js idéntico a V5 (514 registros). Añadir tests/web/medir.mjs que imprima bytes de cada archivo de data/ y el total, y falle si encuentra URLs http(s) distintas del xmlns de SVG, 'localhost', '192.168.' o fetch con URL absoluta. Objetivo de tamaño < 100 000 bytes totales en data/ (sin Data.sql): intentar cumplirlo sin recortar catálogo, opciones ni texto legal; si no se cumple, informarlo en risks con el número exacto.",
+  "read": [
+    "docs/referencia/CONECTA_redisenado_experiencia_v5.html",
+    "docs/referencia/CONECTA_PROMPT_MAESTRO_CODEX_CLAUDE.md",
+    "docs/ai/V5_MANIFIESTO.md",
+    "docs/CONTRATO_JSON.md",
+    "docs/REGLAS_TRIAJE.md",
+    "tests/web/base_legal.json",
+    "tests/web/verificar_legal.mjs"
+  ],
+  "write": [
+    "docs/REGLAS_TRIAJE.md", "docs/CONTRATO_JSON.md",
+    "data/index.html", "data/estilo.css", "data/app.js", "data/lugares.js", "data/triaje.js",
+    "tests/web/triaje.test.mjs", "tests/web/app.test.mjs", "tests/web/lugares.test.mjs", "tests/web/medir.mjs"
+  ],
+  "acceptance": [
+    "data/ contiene solo index.html, estilo.css, app.js, lugares.js, triaje.js y el Data.sql existente",
+    "node tests/web/verificar_legal.mjs data pasa 130/130 sin modificar la línea base",
+    "514 lugares idénticos a V5 y opción «No sé en qué barrio estoy» con referencia obligatoria",
+    "Ruta urgente de tres pasos y ruta normal de V5 conservadas",
+    "Un hazard abandonado al salir de la ruta urgente no eleva el nivel; solo marca V3",
+    "Personas válidas 1–100000 en reglas, contrato, validación y pruebas",
+    "Por verificar es marca transversal; nunca un cuarto nivel",
+    "Solo fetch relativo a /api/reporte; 'guardado' solo con confirmación explícita y mismo idReporte",
+    "Mismo idReporte en reintentos y un solo POST ante doble clic",
+    "Sin hashClave ni clave privada en el payload ni en registros",
+    "Pruebas de Node ejecutadas por el wrapper; tamaño total medido y reportado"
+  ],
+  "checks": [
+    ["node", "--check", "data/app.js"],
+    ["node", "--check", "data/triaje.js"],
+    ["node", "--check", "data/lugares.js"],
+    ["node", "--test", "tests/web/*.test.mjs"],
+    ["node", "tests/web/verificar_legal.mjs", "data"],
+    ["node", "tests/web/medir.mjs"],
+    ["git", "diff", "--quiet", "HEAD", "--", "tests/web/base_legal.json", "tests/web/verificar_legal.mjs", "tests/web/generar_base_legal.py", "docs/referencia"]
+  ]
+}
