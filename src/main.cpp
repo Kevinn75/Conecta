@@ -1,18 +1,21 @@
 #include <Arduino.h>
+#include "Servidor.h"
 
-// put function declarations here:
-int myFunction(int, int);
+ServidorHotspot servidor;
+unsigned long ultimoLatido = 0;
 
 void setup() {
-  // put your setup code here, to run once:
-  int result = myFunction(2, 3);
+    Serial.begin(115200);
+    delay(500);
+    servidor.iniciar();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-}
+    servidor.procesarDNS();
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+    if (millis() - ultimoLatido > 3000) {
+        ultimoLatido = millis();
+        Serial.print("[VIVO] Celulares conectados: ");
+        Serial.println(WiFi.softAPgetStationNum());
+    }
 }
