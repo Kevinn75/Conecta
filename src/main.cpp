@@ -11,10 +11,37 @@
 #endif
 
 #ifdef ROL_ESTACION
+#include <LittleFS.h>
 #include "Servidor.h"
+
 ServidorHotspot servidor;
 QueueHandle_t colaTxReportes = nullptr;
 unsigned long ultimoLatido = 0;
+
+void guardarReporteEnFlash(const PaqueteConecta& pkt) {
+    File f = LittleFS.open("/reportes.jsonl", FILE_APPEND);
+    if (!f) return;
+
+#if ARDUINOJSON_VERSION_MAJOR >= 7
+    JsonDocument doc;
+#else
+    StaticJsonDocument<512> doc;
+#endif
+    doc["estacion"]        = pkt.estacion;
+    doc["codigo"]          = pkt.codigo;
+    doc["categoria"]       = pkt.categoria;
+    doc["urgencia"]        = pkt.urgencia;
+    doc["afectados"]       = pkt.afectados;
+    doc["necesidadesMask"] = pkt.necesidadesMask;
+    doc["haceTiempo"]      = pkt.haceTiempo;
+    doc["ubicacion"]       = pkt.ubicacion;
+    doc["referencia"]      = pkt.referencia;
+    doc["ts"]              = pkt.ts;
+
+    serializeJson(doc, f);
+    f.println();
+    f.close();
+}
 #endif
 
 EspNowLink enlace;
@@ -29,7 +56,7 @@ void setup() {
     // 1. Configurar Hotspot + Portal Cautivo en modo WIFI_AP_STA con canal fijo
     servidor.iniciar(CANAL_ESPNOW);
 
-    // 2. Conectar POST /api/reporte hacia una cola segura para envio por ESP-NOW en loop()
+    // 2. Conectar POST /api/reporte hacia una cola segura para persistir y enviar por ESP-NOW en loop()
     servidor.setCallbackReporte([](const PaqueteConecta& pkt) -> bool {
         if (colaTxReportes == nullptr) return false;
         return (xQueueSend(colaTxReportes, &pkt, 0) == pdTRUE);
@@ -37,7 +64,7 @@ void setup() {
 
     // 3. Iniciar ESP-NOW despues del SoftAP sobre el mismo canal
     enlace.iniciar(CANAL_ESPNOW, MAC_CONCENTRADOR);
-    Serial.println("[ROL] ESTACION activa (Hotspot + Portal Cautivo + ESP-NOW)");
+    Serial.println("[ROL] ESTACION activa (Hotspot + Portal Cautivo + LittleFS + ESP-NOW)");
 #endif
 
 #ifdef ROL_CONCENTRADOR
@@ -52,15 +79,18 @@ void loop() {
 #ifdef ROL_ESTACION
     servidor.procesarDNS();
 
-    // Despachar reportes recibidos por HTTP hacia el Concentrador PMU
+    // Persistir en Flash (Store-and-Forward) y despachar por ESP-NOW hacia el Concentrador PMU
     PaqueteConecta reportePendiente;
     while (colaTxReportes != nullptr && xQueueReceive(colaTxReportes, &reportePendiente, 0) == pdTRUE) {
+        guardarReporteEnFlash(reportePendiente);
         bool ok = enlace.enviar(reportePendiente);
         Serial.printf(
-            "[ESTACION] Reporte codigo=%u barrio=%u cat=%u -> ESP-NOW=%s\n",
+            "[ESTACION] Reporte MZL-%03u | ubic=%s | cat=%u | urg=%u | pers=%u -> ESP-NOW=%s\n",
             reportePendiente.codigo,
-            reportePendiente.barrioId,
+            reportePendiente.ubicacion,
             reportePendiente.categoria,
+            reportePendiente.urgencia,
+            reportePendiente.afectados,
             ok ? "OK" : "ERROR"
         );
     }
@@ -89,6 +119,8 @@ void loop() {
     MensajeRecibido msg;
     while (enlace.hayMensaje(msg)) {
         msg.paquete.estacion[sizeof(msg.paquete.estacion) - 1]     = '\0';
+        msg.paquete.haceTiempo[sizeof(msg.paquete.haceTiempo) - 1] = '\0';
+        msg.paquete.ubicacion[sizeof(msg.paquete.ubicacion) - 1]   = '\0';
         msg.paquete.referencia[sizeof(msg.paquete.referencia) - 1] = '\0';
 
         char macStr[18];
@@ -103,7 +135,7 @@ void loop() {
 #if ARDUINOJSON_VERSION_MAJOR >= 7
         JsonDocument doc;
 #else
-        StaticJsonDocument<384> doc;
+        StaticJsonDocument<512> doc;
 #endif
         doc["source"]          = "esp";
         doc["mac"]             = macStr;
@@ -120,6 +152,8 @@ void loop() {
         doc["ts"]              = msg.paquete.ts;
         doc["hashDispositivo"] = msg.paquete.hashDispositivo;
         doc["codigo"]          = msg.paquete.codigo;
+        doc["haceTiempo"]      = msg.paquete.haceTiempo;
+        doc["ubicacion"]       = msg.paquete.ubicacion;
         doc["referencia"]      = msg.paquete.referencia;
 
         serializeJson(doc, Serial);

@@ -31,6 +31,18 @@ private:
     AsyncWebServer _server;
     CallbackReporte _onReporte = nullptr;
 
+    uint16_t _siguienteCodigo = 100;
+    uint32_t _totalReportes = 0;
+
+    static constexpr size_t HISTORIAL_IDEMPOTENCIA = 32;
+    uint32_t _ultimosHashes[HISTORIAL_IDEMPOTENCIA] = {0};
+    uint16_t _ultimosCodigos[HISTORIAL_IDEMPOTENCIA] = {0};
+    size_t _indiceHistorial = 0;
+
+    static uint32_t hashFnv1a(const char* texto);
+    bool buscarDuplicado(uint32_t hashId, uint16_t& codigoExistente) const;
+    void registrarHash(uint32_t hashId, uint16_t codigo);
+
     void configurarRed();
     void configurarRutas();
 };

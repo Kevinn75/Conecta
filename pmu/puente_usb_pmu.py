@@ -1,34 +1,39 @@
 #!/usr/bin/env python3
 """
-Puente local offline-first entre la ESP32-S3 (ROL_CONCENTRADOR por USB)
-y el tablero web del PMU (pmu.html) sin modificar el frontend.
+Servidor local offline-first CONECTA (Contrato Backend v7) + Puente USB ESP32-S3.
 
 Funciones:
-  1. Sirve pmu.html y config.js en http://localhost:8000 (evita el bloqueo 403 de OSM en file://).
-  2. Emula localmente los streams SSE /conecta/bus.json y /conecta/torres.json que espera pmu.html.
-  3. Lee las lineas JSON que imprime la ESP32-S3 Concentrador por USB (115200 baud)
-     y las traduce en tiempo real a eventos 'tower.heartbeat' y 'report.new' en el mapa del PMU.
+  1. Sirve pmu.html y config.js en http://localhost:8000/ (evita el bloqueo 403 de OSM en file://).
+  2. Implementa el Contrato Backend v7 (CONTRATO_BACKEND.md):
+       - POST   /api/mensajes            (201) guarda y difunde por /api/stream
+       - GET    /api/mensajes            (200) historial en orden de llegada (?sin_torres=1)
+       - GET    /api/stream              SSE con 'data: {json}\\n\\n' y ': ping\\n\\n' cada 20 s
+       - PUT    /api/torres/{id}/latido  (200) recibe latido real de ESP32/simulador por HTTP
+       - DELETE /api/mensajes            (200) limpia datos de demo
+  3. Lee en paralelo la ESP32-S3 Concentrador conectada por USB (115200 baudios)
+     y traduce cada paquete ESP-NOW recibido al formato exacto del PMU v7.
+  4. Permite conectar al mismo tiempo ESP32 reales (por USB/ESP-NOW o por HTTP en red local)
+     y simuladores.
 
 Uso:
-  python pmu/puente_usb_pmu.py                # Autodetecta el puerto COM de la ESP32-S3
+  python pmu/puente_usb_pmu.py                # Autodetecta puerto COM de la ESP32-S3
   python pmu/puente_usb_pmu.py --port COM5    # Usa un puerto COM especifico
-  python pmu/puente_usb_pmu.py --simular      # Prueba sin placa conectada
+  python pmu/puente_usb_pmu.py --sin-usb      # Solo servidor HTTP/SSE (sin leer COM)
+  python pmu/puente_usb_pmu.py --simular      # Prueba con latidos y reporte simulados
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import queue
-import sys
 import threading
 import time
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -50,75 +55,121 @@ CAT_MAP = {
 CATS_URGENTES = {"atrapadas", "derrumbe", "terremoto", "volcanica", "otro"}
 
 
-class EstadoPuente:
-    """Almacenamiento en memoria y difusion SSE hacia todas las pestanas del PMU."""
+class EstadoBackendV7:
+    """Almacenamiento en memoria y difusion SSE conforme al Contrato Backend v7."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._bus: dict[str, dict] = {}
-        self._torres: dict[str, dict] = {}
-        self._bus_subs: list[queue.Queue[str]] = []
-        self._torres_subs: list[queue.Queue[str]] = []
+        self._mensajes: list[dict] = []
+        self._ultimos_latidos: dict[str, dict] = {}
+        self._seen_mids: set[str] = set()
+        self._subs: list[queue.Queue[str]] = []
         self._seq = 0
 
-    def _next_key(self, prefix: str = "m") -> str:
+    def _next_mid(self, prefix: str = "srv") -> str:
         self._seq += 1
-        return f"{prefix}_{self._seq:06d}"
+        return f"{prefix}-{self._seq}-{int(time.time() * 1000)}"
 
-    def snapshot_bus(self) -> dict[str, dict]:
+    def suscribir(self) -> queue.Queue[str]:
+        q: queue.Queue[str] = queue.Queue(maxsize=256)
         with self._lock:
-            return dict(self._bus)
-
-    def snapshot_torres(self) -> dict[str, dict]:
-        with self._lock:
-            return dict(self._torres)
-
-    def suscribir(self, canal: str) -> queue.Queue[str]:
-        q: queue.Queue[str] = queue.Queue(maxsize=128)
-        with self._lock:
-            if canal == "bus":
-                self._bus_subs.append(q)
-            else:
-                self._torres_subs.append(q)
+            self._subs.append(q)
         return q
 
-    def desuscribir(self, canal: str, q: queue.Queue[str]) -> None:
+    def desuscribir(self, q: queue.Queue[str]) -> None:
         with self._lock:
-            lista = self._bus_subs if canal == "bus" else self._torres_subs
-            if q in lista:
-                lista.remove(q)
+            if q in self._subs:
+                self._subs.remove(q)
 
-    def _broadcast(self, lista: list[queue.Queue[str]], payload_sse: str) -> None:
-        for q in list(lista):
+    def _broadcast_locked(self, mensaje: dict) -> None:
+        # Contrato v7: "Cada mensaje nuevo se envia como data: {json}\n\n, sin campo event."
+        trama = f"data: {json.dumps(mensaje, ensure_ascii=False)}\n\n"
+        for q in list(self._subs):
             try:
-                q.put_nowait(payload_sse)
+                q.put_nowait(trama)
             except queue.Full:
                 pass
 
-    def publicar_bus(self, mensaje: dict) -> str:
-        with self._lock:
-            key = self._next_key("msg")
-            self._bus[key] = mensaje
-            sse = f"event: put\ndata: {json.dumps({'path': '/' + key, 'data': mensaje}, ensure_ascii=False)}\n\n"
-            self._broadcast(self._bus_subs, sse)
-            return key
+    def _aplicar_habeas_data_locked(self, mensaje: dict) -> None:
+        """Reglas Ley 1581 del Contrato v7 (§5)."""
+        # 1. Nunca conservar clave privada en claro
+        payload = mensaje.get("payload")
+        if isinstance(payload, dict):
+            payload.pop("clavePrivada", None)
 
-    def publicar_torre(self, tower_id: str, datos: dict) -> None:
+        # 2. Si se retira autorizacion de contacto o salud, borrar ese dato del historial
+        if mensaje.get("type") == "report.consent":
+            rid = mensaje.get("id")
+            consent = mensaje.get("consent") or {}
+            tipo_c = consent.get("tipo")
+            if rid and consent.get("otorgada") is False and tipo_c in ("contacto", "salud"):
+                for prev in self._mensajes:
+                    p = prev.get("payload")
+                    if isinstance(p, dict) and p.get("idReporte") == rid:
+                        p.pop(tipo_c, None)
+                        aut = p.get("autorizaciones")
+                        if isinstance(aut, dict):
+                            aut[tipo_c] = False
+
+    def registrar_mensaje(self, mensaje: dict) -> dict:
         with self._lock:
-            self._torres[tower_id] = datos
-            sse = f"event: put\ndata: {json.dumps({'path': '/' + tower_id, 'data': datos}, ensure_ascii=False)}\n\n"
-            self._broadcast(self._torres_subs, sse)
+            msg = dict(mensaje)
+            if not msg.get("at"):
+                msg["at"] = int(time.time() * 1000)
+            if not msg.get("mid"):
+                msg["mid"] = self._next_mid("msg")
+
+            mid = str(msg["mid"])
+            if mid in self._seen_mids:
+                return msg
+            self._seen_mids.add(mid)
+
+            self._aplicar_habeas_data_locked(msg)
+
+            if msg.get("type") == "tower.heartbeat":
+                tower = str(msg.get("tower") or "").upper()
+                if tower:
+                    self._ultimos_latidos[tower] = msg
+            else:
+                self._mensajes.append(msg)
+
+            self._broadcast_locked(msg)
+            return msg
+
+    def registrar_latido(self, tower_id: str, source: str = "esp", extra: dict | None = None) -> dict:
+        ahora_ms = int(time.time() * 1000)
+        tower = str(tower_id).strip().upper() or "E01"
+        msg: dict = {
+            "type": "tower.heartbeat",
+            "tower": tower,
+            "source": source,
+            "at": ahora_ms,
+        }
+        if extra:
+            for k in ("bateriaPct", "mac"):
+                if k in extra:
+                    msg[k] = extra[k]
+        with self._lock:
+            self._ultimos_latidos[tower] = msg
+            self._broadcast_locked(msg)
+        return msg
+
+    def obtener_historial(self, sin_torres: bool = False) -> list[dict]:
+        with self._lock:
+            if sin_torres:
+                return list(self._mensajes)
+            combinado = list(self._mensajes) + list(self._ultimos_latidos.values())
+            combinado.sort(key=lambda m: m.get("at", 0))
+            return combinado
 
     def limpiar(self) -> None:
         with self._lock:
-            self._bus.clear()
-            self._torres.clear()
-            sse = 'event: put\ndata: {"path":"/","data":{}}\n\n'
-            self._broadcast(self._bus_subs, sse)
-            self._broadcast(self._torres_subs, sse)
+            self._mensajes.clear()
+            self._ultimos_latidos.clear()
+            self._seen_mids.clear()
 
 
-ESTADO = EstadoPuente()
+ESTADO = EstadoBackendV7()
 
 
 def decodificar_necesidades(mask: int) -> list[str]:
@@ -131,33 +182,43 @@ def decodificar_necesidades(mask: int) -> list[str]:
     return [texto for bit, texto in etiquetas if mask & bit]
 
 
-def decodificar_ubicacion(barrio_id: int, referencia: str, torre: str) -> dict:
+def decodificar_ubicacion(barrio_id: int, ubicacion_txt: str, referencia: str, torre: str) -> dict:
     if 1 <= barrio_id <= 346:
         return {"id": f"mz-{barrio_id:04d}"}
     if 1001 <= barrio_id <= 1168:
         return {"id": f"poi-mz-{barrio_id - 1000:04d}"}
+    if ubicacion_txt:
+        return {"id": None, "nombre": ubicacion_txt, "texto": ubicacion_txt}
     if referencia:
-        return {"texto": referencia}
-    return {"texto": f"Zona de la torre {torre}"}
+        return {"id": None, "nombre": referencia, "texto": referencia}
+    return {"id": None, "texto": f"Zona de la torre {torre}"}
+
+
+def decodificar_tiempo(hace_tiempo: str) -> str | None:
+    mapa = {
+        "10": "Hace aprox. 10 minutos",
+        "15": "Hace aprox. 15 minutos",
+        "30": "Hace aprox. 30 minutos",
+        "mas_60": "Hace más de 1 hora",
+    }
+    return mapa.get(hace_tiempo)
 
 
 def procesar_paquete_esp(raw: dict) -> None:
-    """Traduce una linea JSON de ROL_CONCENTRADOR al contrato del PMU."""
+    """Traduce una linea JSON de ROL_CONCENTRADOR (USB) al Contrato v7."""
     ahora_ms = int(time.time() * 1000)
-    torre = str(raw.get("tower") or "E01").strip() or "E01"
+    torre = str(raw.get("tower") or "E01").strip().upper() or "E01"
     tipo = raw.get("tipo")
 
-    # Siempre refresca el latido real de la torre cuando llega trafico valido desde esa estacion
-    latido = {
-        "tower": torre,
-        "source": "esp",
-        "at": ahora_ms,
-        "bateriaPct": raw.get("bateriaPct", 100),
-    }
-    ESTADO.publicar_torre(torre, latido)
+    # Todo trafico valido desde una ESP32 actualiza su latido real (source: "esp")
+    ESTADO.registrar_latido(
+        torre,
+        source="esp",
+        extra={"bateriaPct": raw.get("bateriaPct", 100), "mac": raw.get("mac", "")},
+    )
 
     if tipo in (4, 2, "latido", "telemetria"):
-        print(f"[PMU <- ESP] Latido torre={torre} bat={latido['bateriaPct']}%", flush=True)
+        print(f"[PMU <- ESP] Latido torre={torre} bat={raw.get('bateriaPct', 100)}%", flush=True)
         return
 
     if tipo in (1, "reporte"):
@@ -166,40 +227,52 @@ def procesar_paquete_esp(raw: dict) -> None:
 
         barrio_id = int(raw.get("barrioId") or 0)
         urgencia = int(raw.get("urgencia") or 2)
-        afectados = int(raw.get("afectados") or 1)
+        afectados_raw = raw.get("afectados")
+        afectados_int = int(afectados_raw) if afectados_raw is not None else 0
+        # 0 significa "No se cuantas personas son" -> None ("personas s/d" en pmu.html)
+        personas = afectados_int if afectados_int > 0 else None
+
         mask = int(raw.get("necesidadesMask") or 0)
         codigo = int(raw.get("codigo") or 0)
+        ubicacion_txt = str(raw.get("ubicacion") or "").strip()
         referencia = str(raw.get("referencia") or "").strip()
+        hace_tiempo = str(raw.get("haceTiempo") or "").strip()
 
         es_urgente = (urgencia >= 3) or (categoria in CATS_URGENTES)
         espera = (
             "No podemos esperar"
             if urgencia >= 3
-            else ("Hoy" if urgencia == 2 else "Dentro de las próximas 24 horas")
+            else ("Dentro de las próximas 24 horas" if urgencia == 2 else "Puede esperar más de 24 horas")
         )
 
         id_reporte = f"MZL-{codigo:03d}" if codigo > 0 else f"{torre}-{ahora_ms % 100000}"
+        # mid determinista por (torre, codigo) para evitar duplicados si se reintenta el mismo paquete
+        mid = f"esp-{torre}-{id_reporte}" if codigo > 0 else f"esp-{id_reporte}-{ahora_ms}"
+
         payload = {
             "idReporte": id_reporte,
-            "categoria": categoria,
-            "ruta": "urgente" if es_urgente else "normal",
             "torre": torre,
-            "ubicacion": decodificar_ubicacion(barrio_id, referencia, torre),
-            "personas": afectados,
+            "ruta": "urgente" if es_urgente else "normal",
+            "categoria": categoria,
+            "ubicacion": decodificar_ubicacion(barrio_id, ubicacion_txt, referencia, torre),
+            "referencia": referencia or None,
+            "observado": decodificar_tiempo(hace_tiempo),
+            "personas": personas,
             "necesidades": decodificar_necesidades(mask),
-            "prioridad": {"espera": espera},
-            "referencia": referencia,
+            "prioridad": {"top": None, "motivo": None, "espera": espera},
+            "apoyos": [],
+            "autorizaciones": {"solicitud": True, "contacto": False, "salud": False},
             "fecha": datetime.now(timezone.utc).isoformat(),
         }
         mensaje = {
-            "mid": f"esp-{id_reporte}-{ahora_ms}",
+            "mid": mid,
             "type": "report.new",
             "at": ahora_ms,
             "payload": payload,
         }
-        ESTADO.publicar_bus(mensaje)
+        ESTADO.registrar_mensaje(mensaje)
         print(
-            f"[PMU <- ESP] REPORTE {id_reporte} | torre={torre} | cat={categoria} | barrioId={barrio_id} | pers={afectados}",
+            f"[PMU <- ESP] REPORTE {id_reporte} | torre={torre} | cat={categoria} | ubic={ubicacion_txt or barrio_id} | pers={personas if personas is not None else 's/d'}",
             flush=True,
         )
 
@@ -208,7 +281,6 @@ class PMUHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def log_message(self, format: str, *args) -> None:
-        # Silencia logs ruidosos de cada archivo/peticion HTTP
         pass
 
     def _cors_headers(self) -> None:
@@ -226,7 +298,20 @@ class PMUHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_sse(self, canal: str) -> None:
+    def _send_json(self, code: int, obj: object) -> None:
+        raw = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+        self._send_bytes(code, "application/json; charset=utf-8", raw, no_cache=True)
+
+    def _read_json_body(self) -> dict | None:
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        body = self.rfile.read(length) if length > 0 else b"{}"
+        try:
+            data = json.loads(body.decode("utf-8"))
+            return data if isinstance(data, dict) else {}
+        except json.JSONDecodeError:
+            return None
+
+    def _serve_sse_stream(self) -> None:
         self.send_response(HTTPStatus.OK)
         self._cors_headers()
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -234,24 +319,23 @@ class PMUHandler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
 
-        q = ESTADO.suscribir(canal)
+        q = ESTADO.suscribir()
         try:
-            inicial = ESTADO.snapshot_bus() if canal == "bus" else ESTADO.snapshot_torres()
-            primer_evento = f"event: put\ndata: {json.dumps({'path': '/', 'data': inicial}, ensure_ascii=False)}\n\n"
-            self.wfile.write(primer_evento.encode("utf-8"))
+            self.wfile.write(b": connected\n\n")
             self.wfile.flush()
 
             while True:
                 try:
-                    evento = q.get(timeout=15.0)
+                    evento = q.get(timeout=20.0)
                     self.wfile.write(evento.encode("utf-8"))
                 except queue.Empty:
-                    self.wfile.write(b": keepalive\n\n")
+                    # Contrato v7: ": ping" cada 20 s
+                    self.wfile.write(b": ping\n\n")
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
             pass
         finally:
-            ESTADO.desuscribir(canal, q)
+            ESTADO.desuscribir(q)
 
     def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -260,16 +344,20 @@ class PMUHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
 
-        if path == "/conecta/bus.json":
-            self._serve_sse("bus")
-            return
-        if path == "/conecta/torres.json":
-            self._serve_sse("torres")
+        if path == "/api/stream":
+            self._serve_sse_stream()
             return
 
-        # Servir archivos estaticos del PMU
+        if path == "/api/mensajes":
+            qs = parse_qs(parsed.query)
+            sin_torres = qs.get("sin_torres", ["0"])[0] in ("1", "true", "yes")
+            self._send_json(HTTPStatus.OK, ESTADO.obtener_historial(sin_torres=sin_torres))
+            return
+
+        # Servir archivos estaticos del PMU (pmu.html, config.js)
         rel = "pmu.html" if path in ("/", "/index.html") else path.lstrip("/")
         target = (BASE_DIR / rel).resolve()
         if not str(target).startswith(str(BASE_DIR)) or not target.is_file():
@@ -290,48 +378,43 @@ class PMUHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        body = self.rfile.read(length) if length > 0 else b"{}"
-
-        if path == "/conecta/bus.json":
-            try:
-                data = json.loads(body.decode("utf-8"))
-            except json.JSONDecodeError:
-                self._send_bytes(400, "application/json", b'{"error":"json_invalido"}')
+        if path == "/api/mensajes":
+            data = self._read_json_body()
+            if data is None:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "json_invalido"})
                 return
-            key = ESTADO.publicar_bus(data)
-            resp = json.dumps({"name": key}).encode("utf-8")
-            self._send_bytes(200, "application/json", resp)
+            guardado = ESTADO.registrar_mensaje(data)
+            self._send_json(HTTPStatus.CREATED, {"ok": True, "mid": guardado.get("mid")})
             return
 
-        self._send_bytes(404, "application/json", b'{"error":"ruta_no_encontrada"}')
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "ruta_no_encontrada"})
 
     def do_PUT(self) -> None:
         path = urlparse(self.path).path
-        length = int(self.headers.get("Content-Length", "0") or "0")
-        body = self.rfile.read(length) if length > 0 else b"{}"
-
-        if path.startswith("/conecta/torres/") and path.endswith(".json"):
-            tower_id = path[len("/conecta/torres/") : -len(".json")]
-            try:
-                data = json.loads(body.decode("utf-8"))
-            except json.JSONDecodeError:
-                self._send_bytes(400, "application/json", b'{"error":"json_invalido"}')
+        # PUT /api/torres/{id}/latido
+        if path.startswith("/api/torres/") and path.endswith("/latido"):
+            tower_id = unquote(path[len("/api/torres/") : -len("/latido")]).strip("/")
+            data = self._read_json_body()
+            if data is None:
+                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "json_invalido"})
                 return
-            ESTADO.publicar_torre(tower_id, data)
-            self._send_bytes(200, "application/json", json.dumps(data).encode("utf-8"))
+            source = str(data.get("source") or "esp")
+            latido = ESTADO.registrar_latido(tower_id, source=source, extra=data)
+            print(f"[PMU <- HTTP] Latido torre={latido['tower']} source={source}", flush=True)
+            self._send_json(HTTPStatus.OK, latido)
             return
 
-        self._send_bytes(404, "application/json", b'{"error":"ruta_no_encontrada"}')
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "ruta_no_encontrada"})
 
     def do_DELETE(self) -> None:
         path = urlparse(self.path).path
-        if path == "/conecta.json":
+        if path == "/api/mensajes":
             ESTADO.limpiar()
-            print("[PMU] Datos locales de la demo limpiados.", flush=True)
-            self._send_bytes(200, "application/json", b"null")
+            print("[PMU] Historial local limpiado (DELETE /api/mensajes).", flush=True)
+            self._send_json(HTTPStatus.OK, {"ok": True})
             return
-        self._send_bytes(404, "application/json", b'{"error":"ruta_no_encontrada"}')
+
+        self._send_json(HTTPStatus.NOT_FOUND, {"error": "ruta_no_encontrada"})
 
 
 def detectar_puerto_esp32(puerto_manual: str | None) -> str | None:
@@ -366,7 +449,7 @@ def hilo_lector_usb(puerto_manual: str | None, baud: int) -> None:
         print(
             "[ERROR] Falta la libreria 'pyserial'. Instalala con:\n"
             "        pip install pyserial\n"
-            "        (o prueba sin placa usando: python pmu/puente_usb_pmu.py --simular)",
+            "        (o usa --sin-usb / --simular si aun no vas a leer puerto COM)",
             flush=True,
         )
         return
@@ -400,7 +483,7 @@ def hilo_lector_usb(puerto_manual: str | None, baud: int) -> None:
 
 
 def hilo_simulador() -> None:
-    """Inyecta un latido de E01 cada 5 s y un reporte de prueba a los 4 s para validar sin placa."""
+    """Inyecta latidos de E01 y un reporte de prueba para validar el PMU v7 sin placa."""
     print("[SIM] Modo simulacion activo (sin USB). Enviando trafico de prueba al PMU...", flush=True)
     time.sleep(2)
     procesar_paquete_esp({"source": "esp", "tower": "E01", "tipo": 4, "bateriaPct": 98})
@@ -410,14 +493,14 @@ def hilo_simulador() -> None:
             "source": "esp",
             "tower": "E01",
             "tipo": 1,
-            "barrioId": 6,  # mz-0006 = Chipre
+            "barrioId": 6,   # mz-0006 = Chipre
             "categoria": 2,  # derrumbe
             "urgencia": 3,
             "afectados": 4,
-            "necesidadesMask": 3,  # Agua + Alimentos
+            "necesidadesMask": 3,
             "bateriaPct": 97,
             "codigo": 42,
-            "referencia": "Prueba desde puente USB local",
+            "referencia": "Prueba desde servidor local v7",
         }
     )
     while True:
@@ -426,26 +509,28 @@ def hilo_simulador() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Puente local USB (ESP32-S3 Concentrador) <-> PMU Web")
+    parser = argparse.ArgumentParser(description="Servidor local CONECTA v7 + Puente USB ESP32-S3")
     parser.add_argument("--port", default=None, help="Puerto serie del Concentrador (ej. COM5)")
     parser.add_argument("--baud", type=int, default=115200, help="Velocidad serial (default: 115200)")
+    parser.add_argument("--host", default="0.0.0.0", help="Interfaz HTTP (default: 0.0.0.0 para aceptar red local)")
     parser.add_argument("--http-port", type=int, default=8000, help="Puerto HTTP local (default: 8000)")
+    parser.add_argument("--sin-usb", action="store_true", help="No abre puerto serial; solo recibe por HTTP")
     parser.add_argument("--simular", action="store_true", help="Simula latidos y un reporte sin ESP32")
     args = parser.parse_args()
 
     if args.simular:
-        t = threading.Thread(target=hilo_simulador, daemon=True)
-    else:
-        t = threading.Thread(target=hilo_lector_usb, args=(args.port, args.baud), daemon=True)
-    t.start()
+        threading.Thread(target=hilo_simulador, daemon=True).start()
+    elif not args.sin_usb:
+        threading.Thread(target=hilo_lector_usb, args=(args.port, args.baud), daemon=True).start()
 
-    server = ThreadingHTTPServer(("127.0.0.1", args.http_port), PMUHandler)
-    print(f"[OK] Tablero PMU disponible en: http://localhost:{args.http_port}/", flush=True)
+    server = ThreadingHTTPServer((args.host, args.http_port), PMUHandler)
+    print(f"[OK] Tablero PMU v7 disponible en: http://localhost:{args.http_port}/", flush=True)
+    print(f"[OK] API Contrato v7 escuchando en: http://{args.host}:{args.http_port}/api/", flush=True)
     print("     Presiona Ctrl+C para detener.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[OK] Puente detenido.", flush=True)
+        print("\n[OK] Servidor detenido.", flush=True)
     finally:
         server.server_close()
 

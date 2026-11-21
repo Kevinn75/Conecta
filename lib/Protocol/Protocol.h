@@ -25,22 +25,24 @@ enum CategoriaEmergencia : uint8_t {
     CAT_ENTREGAS      = 11
 };
 
-// Estructura empaquetada para transmision directa por ESP-NOW (limite v1: 250 bytes)
+// Estructura empaquetada para transmision directa por ESP-NOW (128 bytes <= limite 250 bytes)
 struct __attribute__((packed)) PaqueteConecta {
     uint8_t  tipo;            // TipoMensaje
     char     estacion[4];     // Ej: "E01\0"
-    uint16_t barrioId;        // ID del catalogo de lugares (0 = por verificar)
+    uint16_t barrioId;        // ID numerico del catalogo (0 = usar texto en ubicacion[])
     uint8_t  categoria;       // CategoriaEmergencia
     uint8_t  urgencia;        // 1=Medio, 2=Alto, 3=Critico
-    uint8_t  afectados;       // Cantidad aproximada de personas
+    uint8_t  afectados;       // Cantidad aproximada de personas (0-255)
     uint8_t  confirmaciones;  // Conteo de reportes agrupados en la estacion
     uint8_t  necesidadesMask; // bit0=agua, bit1=alimentos, bit2=refugio, bit3=salud
     uint8_t  bateriaPct;      // 0-100% (telemetria / latido)
     uint8_t  saltos;          // 0=origen, 1+=repetido
     uint32_t ts;              // Segundos desde arranque o timestamp epoch
-    uint32_t hashDispositivo; // Identificador seudonimizado (nunca cedula/nombre)
-    uint16_t codigo;          // Codigo numerico corto (ej: 42 -> MZL-042)
-    char     referencia[32];  // Referencia corta opcional sin datos personales
+    uint32_t hashDispositivo; // Identificador seudonimizado / hash de idempotencia
+    uint16_t codigo;          // Codigo numerico corto (ej: 142 -> MZL-142)
+    char     haceTiempo[8];   // "10", "15", "30", "mas_60"
+    char     ubicacion[32];   // Barrio, vereda o punto de referencia escrito
+    char     referencia[64];  // Detalle corto opcional sin datos personales
 };
 
 static_assert(sizeof(PaqueteConecta) <= 250, "PaqueteConecta excede el limite de 250 bytes de ESP-NOW");

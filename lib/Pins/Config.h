@@ -5,6 +5,11 @@
 // Canal Wi-Fi unico compartido entre el Hotspot (SoftAP) y ESP-NOW (1, 6 u 11)
 constexpr uint8_t CANAL_ESPNOW = 1;
 
+// Modo Long Range (Espressif LR a 250 kbps) para ESP-NOW manteniendo Hotspot normal para celulares.
+// IMPORTANTE: Estacion y Concentrador deben compilarse con el MISMO valor (ambos 1 o ambos 0).
+// 1 = Long Range activado | 0 = ESP-NOW estandar (si notas problemas, ponlo en 0)
+#define USAR_ESPNOW_LR 0
+
 // Identificador corto de la estacion (ej. "E01", "E02", "E03")
 constexpr const char* ID_ESTACION = "E01";
 
