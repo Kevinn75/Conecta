@@ -23,7 +23,11 @@ constexpr unsigned long DURACION_SESION_WIFI_MS = 30UL * 1000UL;
 // Tiempo de gracia tras enviar un reporte antes de desconectar el celular (5 s)
 // Permite que el telefono muestre el comprobante MZL-xxx antes de liberar el cupo Wi-Fi.
 constexpr unsigned long GRACIA_POST_REPORTE_MS = 10000UL;
-// Direccion MAC STA del nodo Concentrador PMU.
-// Dejar en broadcast (FF:FF:FF:FF:FF:FF) para pruebas rapidas, o reemplazar
-// por la MAC STA que imprime el Concentrador al iniciar (WiFi.macAddress()).
+
+// Red mallada ESP-NOW (inundacion controlada):
+// Cada estacion reenvia paquetes de otras estaciones hasta MAX_SALTOS_MALLA saltos (2 = hasta 3x alcance).
+constexpr uint8_t MAX_SALTOS_MALLA = 2;
+
+// Direccion destino ESP-NOW: MANTENER en broadcast (FF:FF:FF:FF:FF:FF) para que la red
+// mallada funcione (las estaciones vecinas escuchan y reenvian hacia el Concentrador PMU).
 constexpr uint8_t MAC_CONCENTRADOR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};

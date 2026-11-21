@@ -20,10 +20,8 @@ bool EspNowLink::iniciar(uint8_t canal, const uint8_t* macDestino) {
         }
     }
 
-    // Potencia TX maxima permitida en ESP32-S3 para mejor alcance
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
-
 #if USAR_ESPNOW_LR
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
     // Mantiene el Hotspot (AP) en 802.11 b/g/n para celulares y habilita Long Range (LR) en STA
     if (WiFi.getMode() == WIFI_AP_STA) {
         esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
@@ -33,6 +31,12 @@ bool EspNowLink::iniciar(uint8_t canal, const uint8_t* macDestino) {
         WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR
     );
     Serial.printf("[ESPNOW] Modo Long Range (LR) en STA: %s\n", (errProto == ESP_OK) ? "OK" : "ERROR");
+#else
+    // Asegura protocolo Wi-Fi estandar (limpia cualquier rastro de LR guardado en NVS)
+    if (WiFi.getMode() == WIFI_AP_STA) {
+        esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+    }
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
 #endif
 
     // Asegura que el radio Wi-Fi opere exactamente en el canal acordado
@@ -48,6 +52,8 @@ bool EspNowLink::iniciar(uint8_t canal, const uint8_t* macDestino) {
 #if USAR_ESPNOW_LR && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 1, 0))
     esp_err_t errRate = esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_LORA_250K);
     Serial.printf("[ESPNOW] Tasa LR 250kbps (IDF 4.x): %s\n", (errRate == ESP_OK) ? "OK" : "ERROR");
+#elif !USAR_ESPNOW_LR && (ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 1, 0))
+    esp_wifi_config_espnow_rate(WIFI_IF_STA, WIFI_PHY_RATE_1M_L);
 #endif
 
     esp_now_register_send_cb(onDataSent);

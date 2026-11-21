@@ -410,8 +410,13 @@ void ServidorHotspot::setCallbackReporte(CallbackReporte cb) {
 }
 
 void ServidorHotspot::configurarRed() {
-    // Modo dual: SoftAP para celulares + STA en el mismo canal para ESP-NOW
+    // Limpia cualquier rastro de WIFI_PROTOCOL_LR guardado en la memoria NVS y fija 802.11 b/g/n estandar
+    WiFi.persistent(true);
     WiFi.mode(WIFI_AP_STA);
+    esp_wifi_set_protocol(WIFI_IF_AP,  WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N);
+    WiFi.persistent(false);
+
     WiFi.disconnect(false, true); // Evita escaneos STA que cambien el canal de radio
     WiFi.softAPConfig(_apIP, _apIP, _netMsk);
     WiFi.softAP(_ssid, nullptr, _canalWiFi, 0, 8);

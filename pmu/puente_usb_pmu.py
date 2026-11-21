@@ -262,8 +262,13 @@ def procesar_paquete_esp(raw: dict) -> None:
         extra={"bateriaPct": raw.get("bateriaPct", 100), "mac": raw.get("mac", "")},
     )
 
+    saltos = int(raw.get("saltos") or 0)
+
     if tipo in (4, 2, "latido", "telemetria"):
-        print(f"[PMU <- ESP] Latido torre={torre} bat={raw.get('bateriaPct', 100)}%", flush=True)
+        print(
+            f"[PMU <- ESP] Latido torre={torre} bat={raw.get('bateriaPct', 100)}% saltos={saltos}",
+            flush=True,
+        )
         return
 
     if tipo in (1, "reporte"):
@@ -328,7 +333,7 @@ def procesar_paquete_esp(raw: dict) -> None:
         ESTADO.registrar_metricas_esp(consenso=ya_existe, nuevo=(not ya_existe))
         etiqueta = "CONSENSO" if ya_existe else "REPORTE"
         print(
-            f"[PMU <- ESP] {etiqueta} {id_reporte} | torre={torre} | cat={categoria} | conf={confirmaciones} | urg={urgencia} | pers={personas if personas is not None else 's/d'}",
+            f"[PMU <- ESP] {etiqueta} {id_reporte} | torre={torre} | cat={categoria} | conf={confirmaciones} | urg={urgencia} | saltos={saltos} | pers={personas if personas is not None else 's/d'}",
             flush=True,
         )
 
