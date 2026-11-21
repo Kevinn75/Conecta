@@ -4,13 +4,29 @@ Diseño documental del 20 de noviembre de 2026. **PROPUESTA PENDIENTE DE ACUERDO
 
 Fuentes inspeccionadas: `docs/ai/CONTEXTO.md`, `docs/ai/V5_MANIFIESTO.md`, fases 2 y 4 de `docs/referencia/CONECTA_PROMPT_MAESTRO_CODEX_CLAUDE.md`, `buildPayload()`, `buildLoraPayload()`, catálogos y estado de `docs/referencia/CONECTA_redisenado_experiencia_v5.html`, y registro HTTP en `lib/Servidor/Servidor.cpp:87`. La instrucción de esta tarea limita el trabajo a estos dos documentos. Las propuestas requieren revisión de backend y PMU.
 
+## 0. Formato real del backend e incompatibilidad (actualizado a `047e96a`)
+
+El servidor de la estación ya procesa `POST /api/reporte`, pero con un formato distinto del de este contrato. Ninguno de los dos está acordado por ambas partes. Hasta acordar uno, **no deben usarse juntos con datos de emergencia**.
+
+| Campo del servidor (`PaqueteConecta`) | Equivalente en este contrato | Valor si falta o no encaja | Riesgo |
+| --- | --- | --- | --- |
+| `categoria` (`uint8`, 1 atrapadas, 2 deslizamiento, 3 colapso, 4 heridos, 5 gas/eléctrico, 6 necesidades) | `categoria` texto: `atrapadas`, `derrumbe`, `volcanica`, `terremoto`, `otro`, `necesidades` | `CAT_NECESIDADES` | Un aviso de personas atrapadas se convierte en necesidades. Sin código para volcánica, terremoto ni otro. |
+| `urgencia` (1 medio, 2 alto, 3 crítico) | `triajeSugerido.nivel` | 2 | Un aviso crítico baja a alto. |
+| `afectados` (`uint8`, ≤ 255) | `personas` (1–100 000 o null) | 1 | Cifras mayores de 255 o desconocidas pasan a 1. |
+| `barrioId` (`uint16`, 0 = por verificar) | `ubicacion.id` (`mz-NNNN`, `poi-mz-NNNN`) | 0 | Sin mapeo acordado para los 514 IDs. |
+| `necesidadesMask` (bits agua, alimentos, refugio, salud) | `necesidades` (6 opciones) | 0 | «Otra» y «No sé todavía» sin bit. |
+| `referencia` (31 caracteres) | `referencia` (hasta 160) | vacío | Truncado. |
+| `hashDispositivo` | — (no existe a propósito) | 0 | Identifica el dispositivo; el prompt maestro pide no identificar usuarios por huella. |
+
+Recomendación para acordar con backend: (1) el servidor rechaza con `400/422` cualquier campo obligatorio ausente o fuera de dominio en vez de usar valores por defecto; (2) un único formato de entrada; (3) el mapeo a `PaqueteConecta` se hace en el servidor y conserva `urgencia = 3` para todo aviso `critico`.
+
 ## 1. Rutas y evidencia
 
 Todas las rutas son relativas al mismo origen. `{id}` representa el `idReporte` codificado como un segmento de ruta. No se mantiene una API paralela en plural.
 
 | Método y ruta | Estado | Alcance |
 | --- | --- | --- |
-| `POST /api/reporte` | **CONFIRMADA solo su existencia** | Hoy devuelve siempre 200 y el JSON de espera mostrado abajo, sin leer, validar ni guardar el cuerpo. La semántica de respuesta del contrato futuro **NO está confirmada**. |
+| `POST /api/reporte` | **CONFIRMADA en código (`047e96a`) con OTRO formato** | El servidor lee un JSON plano y numérico (`barrioId`, `categoria` 1–6, `urgencia` 1–3, `afectados` ≤ 255, `necesidadesMask`, `referencia`…), lo encola por ESP-NOW y no persiste. **Ese formato no coincide con este contrato: ver §0 y `BLOQUEANTES.md` B13.** La semántica de respuesta de este contrato **NO está confirmada**. |
 | `GET /api/reporte/{id}/estado` | **PROPUESTA PENDIENTE DE ACUERDO** | Consultar recepción en estación y eventual acuse PMU; no revelar datos personales. |
 | `POST /api/reporte/{id}/verificar` | **PROPUESTA PENDIENTE DE ACUERDO** | Verificación en servidor, protocolo y protección pendientes. No habilitar con la comparación local de V5. |
 | `POST /api/reporte/{id}/autorizaciones` | **PROPUESTA PENDIENTE DE ACUERDO** | Registrar otorgamientos y revocaciones con historial, tras verificación segura. |
@@ -147,7 +163,10 @@ El caso actual es evidencia de código; todos los demás son **PROPUESTA PENDIEN
 
 | Caso | JSON ficticio o respuesta literal actual | Mensaje de UI propuesto |
 | --- | --- | --- |
-| **Actual**, HTTP 200 | `{"status":"en_espera","mensaje":"Endpoint listo"}` | «Envío sin confirmar. La estación todavía no confirma que guardó tu reporte.» |
+| **Actual (`047e96a`)**, HTTP 200 | `{"status":"encolado_espnow","estacion":"E01","codigo":123}` | «Envío sin confirmar. La estación todavía no confirma que guardó tu reporte.» Encolar por radio no es persistir. |
+| **Actual (`047e96a`)**, HTTP 503 | `{"status":"recibido_sin_enlace","estacion":"E01","codigo":123}` | «Envío sin confirmar.» |
+| **Actual (`047e96a`)**, HTTP 400 / 413 | `{"status":"error","mensaje":"JSON invalido"}` / `"Payload demasiado grande"` (cuerpo > 2048 bytes) | «No se pudo leer el envío. Conserva tus respuestas y vuelve a intentarlo.» |
+| Anterior (`307e52d`), HTTP 200 | `{"status":"en_espera","mensaje":"Endpoint listo"}` | «Envío sin confirmar.» |
 | HTTP 201, primera persistencia confirmada | `{"estado":"guardado","idReporte":"FICTICIO-R001","recibidoEnEstacion":true}` | «Reporte recibido y guardado en la estación. Falta confirmación del PMU.» |
 | HTTP 200, reintento idempotente de lo ya guardado | `{"estado":"guardado","idReporte":"FICTICIO-R001","recibidoEnEstacion":true}` | «Tu reporte ya estaba guardado en la estación. Conservamos el mismo código.» |
 | HTTP 202, solo con cola persistente formalmente acordada | `{"estado":"en_cola_persistente","idReporte":"FICTICIO-R001","recibidoEnEstacion":false}` | «La estación lo dejó en una cola persistente. Aún no confirma el guardado del reporte ni la recepción del PMU.» |

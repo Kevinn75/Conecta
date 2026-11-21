@@ -1,6 +1,6 @@
 # Contexto mínimo de CONECTA
 
-Inspección del 20 de noviembre de 2026 sobre `main` en `307e52d` («Actualiza servidor y archivos de la estacion», responsable de backend) de https://github.com/Kevinn75/Conecta.
+Inspección del 20 de noviembre de 2026 sobre `main` en `047e96a` («estacion y pmu», responsable de backend; antes `307e52d`) de https://github.com/Kevinn75/Conecta.
 Releer los archivos si el repositorio evoluciona; este inventario es una instantánea.
 
 ## Comprobado en el repositorio
@@ -9,12 +9,13 @@ Releer los archivos si el repositorio evoluciona; este inventario es una instant
 | --- | --- | --- |
 | `platformio.ini` | ESP32-S3, `board_build.filesystem = littlefs`, particiones `default_16MB.csv`, PSRAM, entornos `estacion` y `concentrador` | Backend |
 | `lib/Servidor/Servidor.{h,cpp}` | Clase `ServidorHotspot`: SoftAP abierto `punto_de_ayuda_conecta` en `192.168.4.1`, DNS cautivo, sondas de portal (302), `serveStatic("/", LittleFS, "/")` | Backend |
-| `POST /api/reporte` | **Responde siempre `200 {"status":"en_espera","mensaje":"Endpoint listo"}`. No lee, valida ni guarda el cuerpo.** | Backend |
+| `POST /api/reporte` | Lee un JSON plano y numérico (máx. 2048 bytes), crea un `PaqueteConecta` y lo encola por ESP-NOW: `200 encolado_espnow`, `503 recibido_sin_enlace`, `400`, `413`. **No persiste. Formato incompatible con `data/` (B13).** | Backend |
 | `src/main.cpp` | Crea `ServidorHotspot`, procesa DNS en `loop()` y registra estaciones conectadas | Backend |
-| `lib/Lora/Lora.h`, `lib/Protocol/Protocol.h`, `lib/Pins/Config.h` | Vacíos | GIS/LoRa |
+| `lib/Protocol/Protocol.h`, `lib/Pins/Config.h`, `lib/EspNowLink/` | `PaqueteConecta` empaquetado (≤ 250 bytes), categorías 1–6, canal y MAC del concentrador, enlace ESP-NOW | Backend |
+| `lib/Lora/Lora.h` | Vacío | GIS/LoRa |
 | `data/Data.sql` | Vacío. En esta rama `Data/` se renombró a `data/` (pendiente de aprobación del backend) | Backend |
 
-No existen rutas de estado, verificación, autorizaciones ni solicitudes del titular; tampoco persistencia (`reportes.jsonl`), confirmación de guardado, deduplicación ni enlace LoRa. No se ha compilado el firmware completo ni probado la placa desde esta rama.
+No existen rutas de estado, verificación, autorizaciones ni solicitudes del titular; tampoco persistencia (`reportes.jsonl`), confirmación de guardado ni deduplicación. El enlace hacia el PMU es ESP-NOW (no LoRa). No se ha compilado el firmware completo ni probado la placa desde esta rama.
 
 ## Responsabilidades (bitácora, sección 3)
 

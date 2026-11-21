@@ -2,14 +2,17 @@
 
 Entrega documental de fase 5. **PROPUESTA PENDIENTE DE ACUERDO** para HTTP, almacenamiento y radio. Se conserva la clase `ServidorHotspot`; aquí no se modifica firmware. Referencias: `CONTRATO_JSON.md`, `REGLAS_TRIAJE.md`, `lib/Triaje/{Triaje.h,Triaje.cpp,README.md}` y `tests/triaje/integracion_servidor/main.cpp`.
 
-## Código observado
+## Código observado (actualizado a `047e96a`, «estacion y pmu»)
 
-- `lib/Servidor/Servidor.cpp:87–89`: `POST /api/reporte` responde siempre HTTP 200 con `{"status":"en_espera","mensaje":"Endpoint listo"}`. No lee, valida ni guarda el cuerpo; no acredita recepción persistente.
-- `Servidor.cpp:37–38`: el comentario dice TTL 0, pero se ejecuta `setTTL(60)`. Es una discrepancia pendiente de revisión por backend, no una corrección realizada.
-- `Servidor.cpp:48–100`: no se registran rutas de estado ni `GET /api/tablero`. El manejador desconocido de las líneas 92–99 devuelve 404 o redirige; no ofrece esas APIs.
-- `Servidor.cpp:10–14`: monta LittleFS con `begin(true)`. Antes de alojar reportes, backend debe revisar la política ante fallos de montaje y recuperación; no se ha probado pérdida de energía.
-- `Servidor.cpp:83–84`: sirve estáticos desde la raíz de LittleFS. La futura persistencia necesita separación y controles para impedir que los reportes se publiquen como archivos estáticos.
-- `src/main.cpp` solo inicia el servidor, procesa DNS y registra el número de estaciones conectadas; no integra el motor.
+> Esta guía se redactó sobre `307e52d`. El commit `047e96a` cambió `POST /api/reporte`; las observaciones siguientes ya corresponden al código nuevo. **Ver primero el bloqueante B13 en `BLOQUEANTES.md`.**
+
+- `Servidor.cpp:108–174`: `POST /api/reporte` ahora reúne el cuerpo (máximo `MAX_BODY_JSON = 2048` bytes, línea 6), lo parsea con ArduinoJson y construye un `PaqueteConecta` (`lib/Protocol/Protocol.h`) a partir de campos **planos y numéricos**: `barrioId`, `categoria` (1–6), `urgencia` (1–3), `afectados` (`uint8_t`), `confirmaciones`, `necesidadesMask`, `bateriaPct`, `ts`, `hashDispositivo`, `codigo`, `referencia` (31 caracteres). Lo entrega al callback `setCallbackReporte` para ESP-NOW y responde `200 {"status":"encolado_espnow",…}` o `503 {"status":"recibido_sin_enlace",…}`; también `400` (cuerpo vacío o JSON inválido) y `413` (cuerpo grande). **No persiste el reporte** y no devuelve `estado:"guardado"`, así que el frontend lo trata como «sin confirmar», que es correcto.
+- **Incompatibilidad (B13):** ese formato no coincide con `docs/CONTRATO_JSON.md` ni con lo que envía `data/`. Los campos ausentes o de otro tipo toman valores por defecto **sin error**: `categoria` → `CAT_NECESIDADES`, `urgencia` → 2, `afectados` → 1, `barrioId` → 0. Un aviso crítico de personas atrapadas enviado por `data/` saldría como necesidades con urgencia alta. Recomendación: rechazar con `400/422` los campos ausentes o fuera de dominio en lugar de usar valores por defecto, y acordar un mapeo único antes de integrar.
+- Otros desajustes: categorías de `Protocol.h` sin equivalente para «Actividad volcánica», «Terremoto o temblor» y «Otro peligro / No sé» de V5; `afectados` limitado a 255 frente a 1–100 000; IDs del catálogo en texto (`mz-0001`, `poi-mz-0001`) frente a `barrioId` numérico; `hashDispositivo` identifica el dispositivo, lo que el prompt maestro pide evitar (no identificar usuarios por huella); cuerpo máximo de 2048 bytes frente a los 16 KiB propuestos (nuestro payload ocupa 1,3–1,5 KB con una autorización y crece con el historial).
+- `Servidor.cpp:58`: el comentario dice TTL 0, pero se ejecuta `setTTL(60)`. Discrepancia pendiente de revisión por backend.
+- `Servidor.cpp:106`: `serveStatic("/", LittleFS, "/")` publica la raíz de LittleFS (bloqueante B12): los reportes persistidos no deben vivir ahí.
+- `Servidor.cpp:214–219`: el manejador desconocido devuelve 404 o redirige; siguen sin existir rutas de estado ni `GET /api/tablero`.
+- `src/main.cpp` inicia el servidor, ESP-NOW y el callback de reportes; no integra `lib/Triaje`. La integración C++ de ejemplo compila con el `Servidor.h` nuevo (RAM 15,9 %, flash 12,5 % en `env:estacion`).
 
 Según `docs/ai/CONTEXTO.md`, en esta rama **`Data/` se renombró a `data/` y necesita aprobación de la responsable de backend**. Esta entrega no hace el renombrado ni modifica esas carpetas.
 

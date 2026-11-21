@@ -12,7 +12,7 @@ Ejecución final del 20 de noviembre de 2026 sobre la rama `ai/claude-codex-orqu
 | Auditoría en navegador (Claude) | `node tests/navegador/node_modules/@playwright/test/cli.js test --config tests/navegador/playwright.config.mjs` | **19/19** en Chromium 1255, viewport iPhone 13 |
 | C++ en PC | `python -I tests/triaje/ejecutar.py` (g++ 16.2, `-Wall -Wextra -Werror`) | Todos los casos; JSON validado con `json.loads` |
 | C++ para ESP32-S3 | `pio ci tests/triaje/esp32_compila.cpp --lib lib/Triaje --board esp32-s3-devkitc-1` | SUCCESS · RAM 9,8 % · flash 7,4 % |
-| Integración con el `Servidor.h` real | `pio ci tests/triaje/integracion_servidor/main.cpp --lib lib/Triaje --lib lib/Servidor --project-conf platformio.ini -e estacion` | SUCCESS · RAM 15,9 % (51 972 B) · flash 12,4 % |
+| Integración con el `Servidor.h` real (`047e96a`) | `pio ci tests/triaje/integracion_servidor/main.cpp --lib lib/Triaje --lib lib/Servidor --lib lib/Pins --lib lib/Protocol --project-conf platformio.ini -e estacion` | SUCCESS · RAM 15,9 % (51 988 B) · flash 12,5 % (con `307e52d`: 51 972 B · 12,4 %) |
 | Imagen LittleFS | `pio run -t buildfs -e estacion` | SUCCESS · `littlefs.bin` 3 538 944 B con `app.js`, `Data.sql`, `estilo.css`, `index.html`, `lugares.js`, `triaje.js` |
 | Backend sin cambios | `git diff --stat origin/main HEAD -- lib/Servidor src platformio.ini lib/Lora lib/Protocol lib/Pins` | Sin diferencias |
 
@@ -42,6 +42,10 @@ Ejecución final del 20 de noviembre de 2026 sobre la rama `ai/claude-codex-orqu
 | **Total** | **103 597** | ≈ 34 000 |
 
 **Objetivo < 100 000 bytes: no cumplido** (exceso de 3 597 bytes). V5 ocupaba 132 217 (−21,6 %). Causa: el motor de triaje (15,9 KB) es código nuevo; el catálogo se compactó de 62 133 a 17 887 bytes sin perder registros; el JS y el CSS ya no tienen comentarios ni sangrías. Alternativa negociable: servir `*.gz` desde LittleFS (ESPAsyncWebServer los entrega si existen), ≈ 34 KB; requiere acuerdo y prueba en la placa.
+
+## Compatibilidad con el backend actual
+
+Compilar juntos no significa que el formato sea compatible: el `POST /api/reporte` de `047e96a` lee otros campos (ver `BLOQUEANTES.md` B13). Comprobado con `triaje.construirPayload`: el payload urgente (1 334 bytes) y el normal (1 542 bytes) no contienen `barrioId`, `urgencia`, `afectados` ni `necesidadesMask`, y `categoria` es texto. Ningún dato de prueba se envió a la placa.
 
 ## Entorno y límites
 

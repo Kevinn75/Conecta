@@ -33,6 +33,16 @@ Revisión de los cambios reales de T1 (`docs/CONTRATO_JSON.md`, `docs/REGLAS_TRI
 - `tools/pmu-maqueta/index.html` en Chromium (iPhone 13): sin peticiones externas ni errores de consola, axe WCAG 2.2 AA sin violaciones, `aria-expanded` cambia con Enter, sin scroll a 360/390 px, aviso de datos ficticios, aclaración de personas no únicas, sin teléfono ni datos de salud.
 - Checks del wrapper en verde; `data/`, `lib/`, `src/`, `platformio.ini` y `tests/` sin cambios.
 
+## Ronda 4 — cambio del backend en `main` (`047e96a`)
+
+| ID | Sev. | Hallazgo | Evidencia | Estado |
+| --- | --- | --- | --- | --- |
+| H8 | Crítico | `data/` y el nuevo `POST /api/reporte` usan formatos incompatibles; el servidor sustituye en silencio los campos ausentes (`categoria`→necesidades, `urgencia`→2, `afectados`→1, `barrioId`→0). Un aviso crítico de personas atrapadas llegaría degradado al PMU. | `Servidor.cpp:146–157` en `047e96a`; payload generado por `Triaje.construirPayload` sin esas claves. | Abierto: B13, requiere acuerdo de mapeo. El backend no se modificó. |
+| H9 | Alto | Cuerpo máximo de 2048 bytes en el servidor frente a 16 KiB propuestos; el historial de autorizaciones puede superarlo (respuesta 413). | `Servidor.cpp:6`; payload de 1 334–1 542 bytes con una autorización. | Abierto: B13. La interfaz lo muestra como «sin confirmar». |
+| H10 | Medio | `PaqueteConecta.hashDispositivo` identifica el dispositivo; `afectados` ≤ 255; sin códigos para volcánica, terremoto y otro peligro. | `lib/Protocol/Protocol.h`. | Abierto: documentado para backend. |
+
+La integración C++ de ejemplo compila con el `Servidor.h` nuevo (RAM 15,9 %, flash 12,5 %). `data/` no cambió: las respuestas reales `encolado_espnow` y `recibido_sin_enlace` se muestran como «sin confirmar», que es correcto porque no hay persistencia.
+
 Resultado final: 19/19 navegador, 80/80 Node, 130/130 legal, C++ en PC y ESP32-S3 en verde, backend sin cambios. Detalle en `docs/VALIDACION.md`.
 
 ### Verificado sin hallazgos
