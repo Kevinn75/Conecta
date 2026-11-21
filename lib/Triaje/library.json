@@ -1,0 +1,8 @@
+{
+  "name": "Triaje",
+  "version": "1.0.0",
+  "description": "Agrupacion portable y acotada de reportes CONECTA",
+  "frameworks": "*",
+  "platforms": "*",
+  "dependencies": {}
+}
