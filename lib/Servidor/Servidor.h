@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
+#include <esp_idf_version.h>
 #include <DNSServer.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
@@ -86,6 +88,25 @@ private:
     static bool ipYaVoto(const IncidenteActivo& inc, uint32_t ip);
     static void agregarIpIncidente(IncidenteActivo& inc, uint32_t ip);
 
+    // --- Control de rotacion Wi-Fi/DHCP: desconexion tras 5 min o al completar el reporte ---
+    static constexpr size_t MAX_SESIONES_WIFI = 8;
+    struct SesionWiFi {
+        bool activo;
+        uint8_t mac[6];
+        unsigned long conectadoEnMs;
+    };
+    struct DesconexionPendiente {
+        volatile bool pendiente;
+        uint32_t ip;
+        unsigned long ejecutarEnMs;
+    };
+    SesionWiFi _sesionesWiFi[MAX_SESIONES_WIFI] = {};
+    DesconexionPendiente _desconexiones[MAX_SESIONES_WIFI] = {};
+    unsigned long _ultimoChequeoSesionesMs = 0;
+
+    void programarDesconexionPostReporte(uint32_t ipCliente, unsigned long ahoraMs);
+    static bool obtenerMacPorIp(uint32_t ipBuscada, const wifi_sta_list_t& staList, uint8_t macSalida[6]);
+    void gestionarSesionesWiFi();
     void configurarRed();
     void configurarRutas();
 };

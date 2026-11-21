@@ -3,6 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+#include <esp_netif.h>
+#elif ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+#include <tcpip_adapter.h>
+#endif
+
 namespace {
 constexpr size_t MAX_BODY_JSON = 2048;
 
@@ -238,6 +244,165 @@ void ServidorHotspot::iniciar(uint8_t canalWiFi) {
 void ServidorHotspot::procesarDNS() {
     // Debe ejecutarse continuamente en el loop() para responder consultas DNS
     _dnsServer.processNextRequest();
+
+    // Verifica cada 1 s turnos de 5 min y desconexiones programadas tras enviar reporte
+    unsigned long ahoraMs = millis();
+    if (ahoraMs - _ultimoChequeoSesionesMs >= 1000UL) {
+        _ultimoChequeoSesionesMs = ahoraMs;
+        gestionarSesionesWiFi();
+    }
+}
+
+void ServidorHotspot::programarDesconexionPostReporte(uint32_t ipCliente, unsigned long ahoraMs) {
+    if (ipCliente == 0) return;
+
+    // Si ya hay una desconexion pendiente para esta IP, actualiza el temporizador
+    for (size_t i = 0; i < MAX_SESIONES_WIFI; ++i) {
+        if (_desconexiones[i].pendiente && _desconexiones[i].ip == ipCliente) {
+            _desconexiones[i].ejecutarEnMs = ahoraMs + GRACIA_POST_REPORTE_MS;
+            return;
+        }
+    }
+    for (size_t i = 0; i < MAX_SESIONES_WIFI; ++i) {
+        if (!_desconexiones[i].pendiente) {
+            _desconexiones[i].ip = ipCliente;
+            _desconexiones[i].ejecutarEnMs = ahoraMs + GRACIA_POST_REPORTE_MS;
+            _desconexiones[i].pendiente = true;
+            return;
+        }
+    }
+}
+
+bool ServidorHotspot::obtenerMacPorIp(uint32_t ipBuscada, const wifi_sta_list_t& staList, uint8_t macSalida[6]) {
+    if (staList.num <= 0) return false;
+
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (netif != nullptr) {
+        for (int i = 0; i < staList.num; ++i) {
+            esp_netif_pair_mac_ip_t pair = {};
+            memcpy(pair.mac, staList.sta[i].mac, 6);
+            if (esp_netif_dhcps_get_clients_by_mac(netif, 1, &pair) == ESP_OK &&
+                pair.ip.addr == ipBuscada) {
+                memcpy(macSalida, staList.sta[i].mac, 6);
+                return true;
+            }
+        }
+    }
+#elif ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 0, 0)
+    tcpip_adapter_sta_list_t adapterList = {};
+    if (tcpip_adapter_get_sta_list(&staList, &adapterList) == ESP_OK) {
+        for (int i = 0; i < adapterList.num; ++i) {
+            if (adapterList.sta[i].ip.addr == ipBuscada) {
+                memcpy(macSalida, adapterList.sta[i].mac, 6);
+                return true;
+            }
+        }
+    }
+#endif
+
+    // Respaldo seguro si solo hay 1 dispositivo conectado al Hotspot
+    if (staList.num == 1) {
+        memcpy(macSalida, staList.sta[0].mac, 6);
+        return true;
+    }
+    return false;
+}
+
+void ServidorHotspot::gestionarSesionesWiFi() {
+    wifi_sta_list_t staList = {};
+    if (esp_wifi_ap_get_sta_list(&staList) != ESP_OK) {
+        return;
+    }
+
+    const unsigned long ahoraMs = millis();
+
+    // 0. Ejecutar desconexiones automaticas de celulares que ya terminaron su reporte
+    for (size_t i = 0; i < MAX_SESIONES_WIFI; ++i) {
+        if (!_desconexiones[i].pendiente) continue;
+        if (static_cast<long>(ahoraMs - _desconexiones[i].ejecutarEnMs) < 0) continue;
+
+        uint8_t macObjetivo[6] = {0};
+        if (obtenerMacPorIp(_desconexiones[i].ip, staList, macObjetivo)) {
+            uint16_t aid = 0;
+            if (esp_wifi_ap_get_sta_aid(macObjetivo, &aid) == ESP_OK && aid > 0) {
+                esp_err_t res = esp_wifi_deauth_sta(aid);
+                Serial.printf(
+                    "[WIFI-TURNO] Reporte completado -> desconectando %02X:%02X:%02X:%02X:%02X:%02X (aid=%u) deauth=%s\n",
+                    macObjetivo[0], macObjetivo[1], macObjetivo[2],
+                    macObjetivo[3], macObjetivo[4], macObjetivo[5],
+                    aid,
+                    (res == ESP_OK) ? "OK" : "ERROR"
+                );
+            }
+            for (size_t k = 0; k < MAX_SESIONES_WIFI; ++k) {
+                if (_sesionesWiFi[k].activo && memcmp(_sesionesWiFi[k].mac, macObjetivo, 6) == 0) {
+                    _sesionesWiFi[k].activo = false;
+                }
+            }
+        }
+        _desconexiones[i].pendiente = false;
+    }
+
+    // 1. Liberar entradas de dispositivos que ya se desconectaron por su cuenta
+    for (size_t i = 0; i < MAX_SESIONES_WIFI; ++i) {
+        if (!_sesionesWiFi[i].activo) continue;
+        bool sigueConectado = false;
+        for (int j = 0; j < staList.num; ++j) {
+            if (memcmp(_sesionesWiFi[i].mac, staList.sta[j].mac, 6) == 0) {
+                sigueConectado = true;
+                break;
+            }
+        }
+        if (!sigueConectado) {
+            _sesionesWiFi[i].activo = false;
+        }
+    }
+
+    // 2. Registrar nuevos clientes y desconectar a quienes superen DURACION_SESION_WIFI_MS (5 min)
+    for (int j = 0; j < staList.num; ++j) {
+        const uint8_t* mac = staList.sta[j].mac;
+        int idxEncontrado = -1;
+        int idxLibre = -1;
+
+        for (size_t i = 0; i < MAX_SESIONES_WIFI; ++i) {
+            if (_sesionesWiFi[i].activo && memcmp(_sesionesWiFi[i].mac, mac, 6) == 0) {
+                idxEncontrado = static_cast<int>(i);
+                break;
+            }
+            if (!_sesionesWiFi[i].activo && idxLibre < 0) {
+                idxLibre = static_cast<int>(i);
+            }
+        }
+
+        if (idxEncontrado < 0) {
+            if (idxLibre >= 0) {
+                _sesionesWiFi[idxLibre].activo = true;
+                memcpy(_sesionesWiFi[idxLibre].mac, mac, 6);
+                _sesionesWiFi[idxLibre].conectadoEnMs = ahoraMs;
+                Serial.printf(
+                    "[WIFI-TURNO] Dispositivo conectado %02X:%02X:%02X:%02X:%02X:%02X (limite %lu s)\n",
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                    DURACION_SESION_WIFI_MS / 1000UL
+                );
+            }
+            continue;
+        }
+
+        if (ahoraMs - _sesionesWiFi[idxEncontrado].conectadoEnMs >= DURACION_SESION_WIFI_MS) {
+            uint16_t aid = 0;
+            if (esp_wifi_ap_get_sta_aid(mac, &aid) == ESP_OK && aid > 0) {
+                esp_err_t res = esp_wifi_deauth_sta(aid);
+                Serial.printf(
+                    "[WIFI-TURNO] Turno de 5 min vencido para %02X:%02X:%02X:%02X:%02X:%02X (aid=%u) -> deauth=%s\n",
+                    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                    aid,
+                    (res == ESP_OK) ? "OK" : "ERROR"
+                );
+            }
+            _sesionesWiFi[idxEncontrado].activo = false;
+        }
+    }
 }
 
 void ServidorHotspot::setCallbackReporte(CallbackReporte cb) {
@@ -398,6 +563,7 @@ void ServidorHotspot::configurarRutas() {
                     codigoExistente
                 );
                 request->send(200, "application/json", dupResp);
+                programarDesconexionPostReporte(ipCliente, ahoraMs);
                 return;
             }
 
@@ -499,6 +665,7 @@ void ServidorHotspot::configurarRutas() {
                         existente->confirmaciones
                     );
                     request->send(200, "application/json", dupResp);
+                    programarDesconexionPostReporte(ipCliente, ahoraMs);
                     return;
                 }
 
@@ -568,6 +735,9 @@ void ServidorHotspot::configurarRutas() {
                     pkt.confirmaciones
                 );
                 request->send(encolado ? 200 : 503, "application/json", consResp);
+                if (encolado) {
+                    programarDesconexionPostReporte(ipCliente, ahoraMs);
+                }
                 return;
             }
 
@@ -609,6 +779,9 @@ void ServidorHotspot::configurarRutas() {
                 pkt.codigo
             );
             request->send(encolado ? 200 : 503, "application/json", respuesta);
+            if (encolado) {
+                programarDesconexionPostReporte(ipCliente, ahoraMs);
+            }
         },
         nullptr,
         [](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {

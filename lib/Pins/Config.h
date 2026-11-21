@@ -16,6 +16,13 @@ constexpr const char* ID_ESTACION = "E01";
 // Intervalo de latido hacia el Concentrador PMU (ms)
 constexpr unsigned long INTERVALO_LATIDO_MS = 5000;
 
+// Tiempo maximo que cada celular puede permanecer conectado al Hotspot (5 minutos = 300000 ms)
+//constexpr unsigned long DURACION_SESION_WIFI_MS = 5UL * 60UL * 1000UL;
+constexpr unsigned long DURACION_SESION_WIFI_MS = 30UL * 1000UL;
+
+// Tiempo de gracia tras enviar un reporte antes de desconectar el celular (5 s)
+// Permite que el telefono muestre el comprobante MZL-xxx antes de liberar el cupo Wi-Fi.
+constexpr unsigned long GRACIA_POST_REPORTE_MS = 10000UL;
 // Direccion MAC STA del nodo Concentrador PMU.
 // Dejar en broadcast (FF:FF:FF:FF:FF:FF) para pruebas rapidas, o reemplazar
 // por la MAC STA que imprime el Concentrador al iniciar (WiFi.macAddress()).

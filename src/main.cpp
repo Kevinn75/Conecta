@@ -101,7 +101,7 @@ void loop() {
 
         PaqueteConecta latido = {};
         latido.tipo       = MSG_LATIDO;
-        strncpy(latido.estacion, ID_ESTACION, sizeof(latido.estacion) - 1);
+        snprintf(latido.estacion, sizeof(latido.estacion), "%s", ID_ESTACION);
         latido.bateriaPct = 100;
         latido.ts         = millis() / 1000;
 
