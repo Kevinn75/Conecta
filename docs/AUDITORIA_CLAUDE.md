@@ -14,6 +14,20 @@ Revisión de los cambios reales de T1 (`docs/CONTRATO_JSON.md`, `docs/REGLAS_TRI
 | H6 | Info / bloqueo | En `?modo=estacion`, con acuse `guardado` válido, el comprobante muestra a la vez «Recibido y guardado en la estación» y el texto congelado de V5 «No se ha confirmado recepción por un servidor real.». | Prueba 3b (`contradiccionComprobanteGuardado: true`). | No modificar el texto legal: el modo de uso real sigue bloqueado (ver `BLOQUEANTES.md`). |
 | H7 | Medio (preexistente) | Contraste insuficiente en pantallas legales (`color-contrast`, 14 nodos), idéntico en V5 y `data/`. | Prueba 5 (axe WCAG 2.2 AA): sin regresiones; mismas violaciones en ambas. | Requiere autorización del usuario para tocar el CSS legal. |
 
+## Ronda 2 — verificación de correcciones (T2b)
+
+| ID | Estado | Evidencia |
+| --- | --- | --- |
+| H1 | **Cerrado** | Pruebas 2a y 2b pasan: el cambio de ruta borra solo los campos de la ruta abandonada; ubicación e historial legal intactos (prueba 1 sigue sin diferencias). |
+| H2 | **Cerrado** | Prueba 10: `rapidPersons: "0"` → `nivel: "critico"`, `personas: null`, V3. La ruta normal mantiene la validación. Documentado en `REGLAS_TRIAJE.md`. |
+| H3 | **Cerrado** | Prueba 9: inicio idéntico a V5 píxel a píxel; el foco al `h2` al cambiar de pantalla se mantiene (prueba 6). |
+| H4 | **Cerrado** | Prueba 11: borde superior, centro y borde inferior del botón accesibles con el menú abierto. |
+| H5 | **Abierto, aceptado con informe** | 103 597 bytes (antes 104 635). Sin comentarios ni sangrías; el exceso es lógica nueva de triaje. Alternativa `.gz` en `BLOQUEANTES.md` (B8). No se hizo otro ciclo para no arriesgar comportamiento ya verificado. |
+| H6 | Abierto (bloqueo legal) | B3. |
+| H7 | Abierto (requiere autorización) | B9. |
+
+Resultado final: 19/19 navegador, 80/80 Node, 130/130 legal, C++ en PC y ESP32-S3 en verde, backend sin cambios. Detalle en `docs/VALIDACION.md`.
+
 ### Verificado sin hallazgos
 
 - Flujos legales: 21 pantallas (privacidad, revisión con casilla marcada/desmarcada, permiso y datos de contacto, verificación con código erróneo y correcto, historial, revocaciones, solicitudes de corrección y supresión, salud, ruta urgente con art. 10c): texto visible y casillas idénticos a V5.
