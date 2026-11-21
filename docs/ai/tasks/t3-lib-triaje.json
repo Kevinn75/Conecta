@@ -1,0 +1,30 @@
+{
+  "id": "t3-lib-triaje",
+  "objective": "Fase 3 del prompt maestro: módulo C++ portable lib/Triaje/ que el backend integrará en lib/Servidor/ (no modificar lib/Servidor, src, platformio.ini ni lib/Lora). C++17 sin Arduino.h, sin excepciones, sin RTTI obligatorio, sin std::string/vector en la API pública, sin heap creciente: capacidades fijas documentadas en Triaje.h (p. ej. MAX_INCIDENTES_ACTIVOS 64, MAX_IDS_RECIENTES 256, longitudes máximas de cadenas) y comportamiento definido cuando se llenan (nunca descartar un reporte: devolver bandera de capacidad agotada para que el backend decida). No cargar reportes.jsonl en RAM: la persistencia y la recuperación son del backend; ofrecer una interfaz abstracta (p. ej. FuenteIncidentes) para que el backend suministre índices persistidos, y una implementación en memoria acotada para pruebas. Funciones públicas mínimas: evaluar un reporte entrante y devolver ResultadoIngreso {tipo: NUEVO | REINTENTO_MISMO_ENVIO, incidenteId, motivoAsociacion, banderas, versionReglas}; detección de reintentos por idReporte/idempotencyKey igual (una sola operación; devolver el incidente y estado originales); búsqueda de candidatos de incidente usando ubicacionId conocido + categoria + ventana < 20 min (constante configurable) como criterio de CANDIDATO, nunca de duplicado; la ubicación desconocida nunca se agrupa automáticamente (queda por verificar, incidente propio); cada reporte conserva su reporteId y se asocia a un incidenteId; agregación de IncidenteAgrupado {incidenteId, zona, tipo, prioridadSugerida(nivel máximo), estadoVerificacion, cantidadReportes, cantidadPersonasDeclaradas (suma declarada, NO personas únicas), necesidades desglosadas, razones, ids de reportes acotados, fechas}; banderas de sospecha: ráfaga (más de N reportes con la misma clave en M segundos), patrón repetitivo, datos faltantes y discrepancias, todas como revisionAntifraude sin descartar ni rebajar alertas críticas y sin identificar usuarios por IP/MAC; versión de reglas y motivo de asociación trazables para que el backend los persista. Niveles 'critico','alto','medio' y requiereVerificacion iguales a docs/REGLAS_TRIAJE.md (el nivel llega calculado en el reporte; el módulo no reclasifica, solo agrega y puede marcar verificación). Serialización JSON acotada a buffer (snprintf) de IncidenteAgrupado según docs/CONTRATO_JSON.md, con escape correcto. Archivos: lib/Triaje/Triaje.h, lib/Triaje/Triaje.cpp, lib/Triaje/library.json (nombre Triaje, sin dependencias), lib/Triaje/README.md (API, capacidades, memoria estimada en bytes, cómo integrarlo). Pruebas de PC en tests/triaje/: test_triaje.cpp con asserts propios y dobles de almacenamiento, y ejecutar.py que compile con g++ -std=c++17 -Wall -Wextra -Werror -O1 en .pio/triaje-host/ y ejecute; casos obligatorios: dos teléfonos con familias distintas del mismo deslizamiento -> 1 incidente, 2 reportes; doble envío del mismo idReporte -> 1 reporte; 50 avisos idénticos en ráfaga -> bandera de anomalía y 50 reportes conservados; alerta vital con ubicación desconocida -> crítica, por verificar, sin agrupar; reporte sospechoso de personas atrapadas no se suprime; capacidad llena no descarta; ventana de 20 min en el borde; cadenas largas truncadas sin desbordar; JSON escapado. Además tests/triaje/esp32_compila.cpp: sketch mínimo (setup/loop) que incluya Triaje.h y use la API, para compilar con PlatformIO para esp32-s3-devkitc-1. Y tests/triaje/integracion_servidor/main.cpp: ejemplo de integración que incluya el Servidor.h real sin modificarlo y Triaje.h, cree ServidorHotspot igual que src/main.cpp y muestre en una función libre (p. ej. procesarReporteEjemplo(const char* json, size_t n)) cómo el backend llamaría al motor tras parsear el cuerpo con ArduinoJson; no registra rutas nuevas ni toca lib/Servidor; sirve para demostrar que la integración no exige reescribir el servidor. El límite de personas debe ser exactamente 1–100000 (constante pública TRIAJE_MAX_PERSONAS = 100000, igual a la interfaz y a docs/CONTRATO_JSON.md); valores fuera de rango o desconocidos (-1) no descartan el reporte: se aceptan con bandera de datos inválidos o faltantes y no suman a cantidadPersonasDeclaradas. Distinguir en la API y en las pruebas tres casos: reintento idéntico del mismo reporte (mismo idReporte), reporte distinto del mismo incidente (otro idReporte, se conserva y se asocia) y posible envío automatizado (ráfaga, bandera revisionAntifraude). Nunca eliminar reportes independientes por coincidir en barrio, categoría y ventana temporal.",
+  "read": [
+    "docs/referencia/CONECTA_PROMPT_MAESTRO_CODEX_CLAUDE.md",
+    "docs/CONTRATO_JSON.md",
+    "docs/REGLAS_TRIAJE.md",
+    "docs/ai/CONTEXTO.md",
+    "lib/Servidor/Servidor.h",
+    "platformio.ini"
+  ],
+  "write": ["lib/Triaje/", "tests/triaje/"],
+  "acceptance": [
+    "Ningún reporte independiente se elimina; agregados no suman personas únicas",
+    "Reintento con el mismo idReporte produce una sola operación",
+    "Zona+categoría+<20 min solo genera candidatos; ubicación desconocida no se agrupa",
+    "Ráfagas marcadas para revisión, sin descartes ni rebaja de alertas críticas",
+    "Capacidades fijas documentadas y comportamiento al llenarse",
+    "Sin dependencias de Arduino en Triaje.h/.cpp; compila en PC y para ESP32-S3",
+    "No se modifican archivos del backend",
+    "TRIAJE_MAX_PERSONAS = 100000, igual a la interfaz y al contrato",
+    "Ejemplo de integración compila con el Servidor.h real y el entorno estacion sin cambiar lib/Servidor"
+  ],
+  "checks": [
+    ["python", "-I", "tests/triaje/ejecutar.py"],
+    ["C:/Users/ASUS Owen/.platformio/penv/Scripts/pio.exe", "ci", "tests/triaje/esp32_compila.cpp", "--lib", "lib/Triaje", "--board", "esp32-s3-devkitc-1", "--project-option", "framework=arduino"],
+    ["C:/Users/ASUS Owen/.platformio/penv/Scripts/pio.exe", "ci", "tests/triaje/integracion_servidor/main.cpp", "--lib", "lib/Triaje", "--lib", "lib/Servidor", "--project-conf", "platformio.ini", "--environment", "estacion"],
+    ["git", "diff", "--quiet", "HEAD", "--", "lib/Servidor", "src", "platformio.ini", "lib/Lora", "lib/Protocol"]
+  ]
+}
