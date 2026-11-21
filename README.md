@@ -10,7 +10,7 @@ Claude Code **Opus 5.5** planifica y revisa. Codex CLI **GPT-6 Astra** implement
 
 - [Guía, herramientas e instalación](docs/ai/GUIA.md)
 - [Criterios de diseño de frontend](docs/ai/FRONTEND.md)
-- [Primera tarea propuesta](docs/ai/tasks/frontend-foundation.json)
+- [Primera tarea propuesta](docs/ai/tasks/t1-contrato-reglas.json)
 - [Instrucciones para Claude](CLAUDE.md) y [reglas compartidas](AGENTS.md)
 
 Previsualización sin llamar a un modelo:

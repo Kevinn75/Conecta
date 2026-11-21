@@ -1,0 +1,24 @@
+{
+  "id": "t1-contrato-reglas",
+  "objective": "Fases 2 (diseño) y 4 del prompt maestro, solo documentación. Escribir docs/CONTRATO_JSON.md y docs/REGLAS_TRIAJE.md en español. CONTRATO_JSON.md: partir de la única ruta real, POST /api/reporte (lib/Servidor/Servidor.cpp, hoy responde siempre 200 {status:'en_espera'} sin guardar); marcar cada ruta como CONFIRMADA (solo POST /api/reporte existe, y su semántica de respuesta NO está confirmada) o PROPUESTA PENDIENTE DE ACUERDO (estado, verificar, autorizaciones, solicitudes, PATCH), usando /api/reporte/{id}/... para no crear dos APIs. Definir con tabla (nombre, tipo, obligatorio, null permitido, rango/enumeración, semántica) el cuerpo del POST tomando los nombres reales de buildPayload() de V5: idReporte (también clave de idempotencia), torre, ruta, categoria, ubicacion, referencia, personas, quienIncluye, observado, necesidades, prioridad, apoyos, otraNecesidad, autorizaciones, consents, fecha, más versionEsquema y triajeSugerido. Excluir hashClave y la clave privada (explicar por qué: PIN de 6 dígitos reversible y crypto.subtle ausente en http://192.168.4.1). Respuestas: 201/200 solo con persistencia confirmada {estado:'guardado',idReporte,recibidoEnEstacion:true}; reintento idempotente; 202 solo con cola persistente acordada; 400/422, 409, 429, 503; y el caso real actual 200 {status:'en_espera'} que la UI debe tratar como 'sin confirmar'. Cada caso con JSON de ejemplo ficticio y mensaje de UI. Separar estados sin confirmar / recibido y guardado en la estación / confirmado por el PMU. Incluir el resumen LoRa de buildLoraPayload() como estructura propuesta sin contacto, salud ni texto libre. REGLAS_TRIAJE.md: matriz configurable versionada (versionReglas 'triaje-2026-11-20.1') con niveles critico/alto/medio y requiereVerificacion como marca transversal, nunca un cuarto nivel; reglas con ID estable (p. ej. C1..), condición sobre campos reales de V5 (danger Sí/No/No sé, hazard de HAZARDS, needs, why, waiting, ubicación desconocida, personas), evidencia y motivo en español; 'No sé' sobre peligro no se rebaja a medio; personas/familias son señales, no desplazan alertas vitales; no inventar barrios críticos ni capas GIS; prioridad sugerida y decisión humana del PMU. Incluir tabla de al menos 15 casos esperados (entrada → nivel, requiereVerificacion, reglas) que cubran los casos del prompt maestro.",
+  "read": [
+    "docs/referencia/CONECTA_PROMPT_MAESTRO_CODEX_CLAUDE.md",
+    "docs/referencia/CONECTA_redisenado_experiencia_v5.html",
+    "docs/ai/CONTEXTO.md",
+    "docs/ai/V5_MANIFIESTO.md",
+    "lib/Servidor/Servidor.cpp"
+  ],
+  "write": ["docs/CONTRATO_JSON.md", "docs/REGLAS_TRIAJE.md"],
+  "acceptance": [
+    "Solo se crean docs/CONTRATO_JSON.md y docs/REGLAS_TRIAJE.md",
+    "Ninguna ruta distinta de POST /api/reporte aparece como confirmada; las demás dicen PROPUESTA PENDIENTE DE ACUERDO",
+    "El caso 200 {status:'en_espera'} está documentado como 'sin confirmar', nunca como guardado",
+    "El POST no contiene hashClave ni clave privada; contacto y salud solo con autorización vigente y nunca en LoRa",
+    "Por verificar es una marca transversal; 'No sé' sobre peligro no produce 'medio' automático",
+    "Al menos 15 casos de triaje tabulados con resultado esperado",
+    "Ejemplos con datos ficticios; sin URLs absolutas ni IP como destino de API"
+  ],
+  "checks": [
+    ["node", "-e", "const f=require('fs');for(const p of ['docs/CONTRATO_JSON.md','docs/REGLAS_TRIAJE.md']){const t=f.readFileSync(p,'utf8');if(t.length<2000)throw new Error(p+' demasiado corto')}const c=f.readFileSync('docs/CONTRATO_JSON.md','utf8');for(const s of ['/api/reporte','en_espera','PROPUESTA PENDIENTE DE ACUERDO','idReporte']){if(!c.includes(s))throw new Error('Falta '+s)}const r=f.readFileSync('docs/REGLAS_TRIAJE.md','utf8');for(const s of ['critico','alto','medio','requiereVerificacion','triaje-2026-11-20.1']){if(!r.includes(s))throw new Error('Falta '+s)}"]
+  ]
+}

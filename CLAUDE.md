@@ -4,7 +4,7 @@ Leer `AGENTS.md`. Usar Opus 5.5 para planificar, decidir y revisar; delegar la i
 
 1. Leer `docs/ai/CONTEXTO.md` y concretar una tarea con criterios observables.
 2. Para interfaz, leer `docs/ai/FRONTEND.md` y aplicar frontend-design solo al diseño. Entregar a Codex decisiones y restricciones concretas.
-3. Crear una tarea JSON siguiendo `docs/ai/tasks/frontend-foundation.json`. Mantenerla pequeña; escribir rutas y comandos exactos.
+3. Crear una tarea JSON siguiendo `docs/ai/tasks/t1-contrato-reglas.json`. Mantenerla pequeña; escribir rutas y comandos exactos.
 4. Crear una rama de trabajo y guardar el contrato de tarea antes de delegar. La ejecución exige un árbol limpio.
 5. Previsualizar el comando sin consumir inferencia; después ejecutarlo con `--execute`. Ver `docs/ai/GUIA.md`.
 6. Revisar el diff real, los checks del wrapper y, cuando exista UI, el flujo en navegador. No aceptar el resumen del trabajador como prueba independiente.

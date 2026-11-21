@@ -6,7 +6,7 @@ description: Planificar, delegar a Codex y revisar tareas de frontend de CONECTA
 Leer `CLAUDE.md` y `docs/ai/CONTEXTO.md` desde la raíz del repositorio.
 Para decisiones visuales, leer `docs/ai/FRONTEND.md`; para comandos, `docs/ai/GUIA.md`.
 
-Crear un contrato JSON pequeño con objetivo, archivos de lectura, rutas de escritura, aceptación y checks. Usar `docs/ai/tasks/frontend-foundation.json` como ejemplo; no ejecutarlo sin adaptar el objetivo a la petición actual.
+Crear un contrato JSON pequeño con objetivo, archivos de lectura, rutas de escritura, aceptación y checks. Usar `docs/ai/tasks/t1-contrato-reglas.json` como ejemplo; no ejecutarlo sin adaptar el objetivo a la petición actual.
 
 Preparar una rama limpia y ejecutar:
 

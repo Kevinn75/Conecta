@@ -76,13 +76,13 @@ claude mcp add --transport http openaiDeveloperDocs https://developers.openai.co
 3. Inspeccionar el comando sin llamar a un modelo:
 
 ```bash
-python3 scripts/ai/codex_worker.py docs/ai/tasks/frontend-foundation.json --mode implement
+python3 scripts/ai/codex_worker.py docs/ai/tasks/t1-contrato-reglas.json --mode implement
 ```
 
 4. Ejecutar en la rama limpia cuando esa tarea esté autorizada:
 
 ```bash
-python3 scripts/ai/codex_worker.py docs/ai/tasks/frontend-foundation.json --mode implement --execute
+python3 scripts/ai/codex_worker.py docs/ai/tasks/t1-contrato-reglas.json --mode implement --execute
 ```
 
 Para diagnóstico sin modificaciones, ejecutar `repository-audit.json` en el modo predeterminado `inspect`, añadiendo `--execute` después de previsualizarlo. `--timeout` limita cada proceso y `--effort high` permite más esfuerzo cuando la tarea lo requiera.

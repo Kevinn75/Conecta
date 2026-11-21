@@ -4,7 +4,9 @@
 - Usar búsquedas acotadas; no cargar todo el repositorio, historiales ni logs completos.
 - Distinguir lo implementado, lo propuesto y lo simulado. No inventar APIs, acuses del PMU ni pruebas ejecutadas.
 - Conservar el firmware y sus contratos salvo que la tarea autorice modificarlos.
-- El frontend propuesto vive en `web/`; `Data/` contiene el marcador SQL, no los recursos web.
+- El frontend ciudadano vive en `data/` (lo que se sube a LittleFS); solo archivos estáticos finales. Maquetas y herramientas van fuera de `data/`.
+- `lib/Servidor/`, `src/main.cpp`, `platformio.ini` y `lib/Lora/` pertenecen al backend: no modificarlos.
+- Los textos legales de V5 se conservan literalmente; comprobar con `node tests/web/verificar_legal.mjs`.
 - Priorizar español claro, accesibilidad, teléfono y funcionamiento con recursos locales.
 - No introducir React/Next.js, servicios externos o dependencias solo por preferencia estética.
 - Una tarea, una rama y un escritor a la vez. No editar archivos ajenos al alcance.
