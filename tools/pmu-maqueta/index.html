@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CONECTA · Maqueta de incidente PMU</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edf2f4;color:#182a35;font:1rem/1.55 system-ui,sans-serif}main{max-width:760px;margin:auto;padding:24px 16px 48px}h1{font-size:1.65rem;line-height:1.2}h2{font-size:1.3rem}h3{font-size:1.1rem}h1,h2,h3,p{margin:0 0 14px}.eyebrow{font-weight:750;letter-spacing:.08em;font-size:.8rem}.notice{padding:16px;border:2px solid #785500;background:#fff5ce;border-radius:12px;margin:20px 0}.card{background:white;border:1px solid #bccbd3;border-radius:18px;overflow:hidden;box-shadow:0 8px 24px #182a3510}.body{padding:20px}.badges{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border:2px solid currentColor;font-weight:700;border-radius:7px}.priority{color:#754500;background:#fff0d4}.triangle{width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:15px solid currentColor}.verify{color:#294b70;border-style:dashed}.review{border-left:4px solid #685097;padding:12px;background:#f3eefb}.counts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0 8px}.count{background:#f0f5f6;border-radius:10px;padding:12px}.count strong{display:block;font-size:1.8rem}.hint{font-size:.92rem;color:#3f5360}.dates{font-size:.9rem;margin:18px 0;overflow-wrap:anywhere}ul{padding-left:22px}button{font:inherit;font-weight:750;width:100%;min-height:52px;padding:14px;background:#163e50;color:white;border:0;cursor:pointer;text-align:left}button:hover{background:#24556b}button:focus-visible{outline:4px solid #a24600;outline-offset:-6px}#details{padding:20px;border-top:1px solid #bccbd3}.report{border:1px solid #bccbd3;border-radius:10px;padding:14px;margin-bottom:14px}.id{overflow-wrap:anywhere}.footer{margin-top:20px;font-size:.9rem}[hidden]{display:none!important}@media(max-width:420px){main{padding:18px 12px}.body,#details{padding:16px}.count{padding:10px}h1{font-size:1.45rem}}
+</style>
+</head>
+<body>
+<main>
+<p class="eyebrow">CONECTA / EJEMPLO PMU</p>
+<h1>Un incidente, cada reporte visible</h1>
+<aside class="notice" aria-label="Aviso de demostración"><strong>Maqueta con datos ficticios.</strong> No reemplaza el tablero del integrante PMU. No recibe ni transmite reportes reales.</aside>
+<noscript><p>Activa JavaScript para explorar los datos ficticios de esta tarjeta.</p></noscript>
+<article class="card" aria-labelledby="incident-title" hidden id="card">
+<div class="body">
+<div class="badges"><span class="badge priority"><span class="triangle" aria-hidden="true"></span><span id="priority"></span></span><span class="badge verify" id="verification"></span></div>
+<h2 id="incident-title"></h2><p class="hint id" id="incident-id"></p>
+<p class="review" id="review"></p>
+<div class="counts"><div class="count"><strong id="reports-count"></strong>Reportes</div><div class="count"><strong id="people-count"></strong>Personas declaradas</div></div>
+<p class="hint">Las personas declaradas <strong>no son únicas</strong>: pueden repetirse entre reportes. No es un conteo de familias.</p>
+<h3>Necesidades del incidente</h3><ul id="needs"></ul><p class="hint">Cada cifra cuenta reportes que mencionan la necesidad, no personas.</p>
+<h3>Por qué se sugiere esta prioridad</h3><ul id="reasons"></ul>
+<p class="dates" id="dates"></p><p class="hint">La prioridad es una sugerencia para revisión humana. No confirma atención ni plazos.</p>
+</div>
+<button type="button" id="toggle" aria-expanded="false" aria-controls="details">Ver reportes individuales <span aria-hidden="true">＋</span></button>
+<section id="details" aria-labelledby="details-title" hidden><h3 id="details-title">Cada solicitud conserva su ID</h3><div id="individuals"></div></section>
+</article>
+<p class="footer">Propuesta pendiente de acuerdo · Vista local sin conexión con una estación ni con el PMU.</p>
+</main>
+<script>
+'use strict';
+const incidente = {
+  incidenteId:'I-FICTICIO-R001',zona:'Zona de demostración',tipo:'necesidades',
+  prioridadSugerida:'alto',estadoVerificacion:'por_verificar',cantidadReportes:2,
+  cantidadPersonasDeclaradas:7,
+  necesidades:{'Agua potable':2,'Alimentos':1,'Refugio o alojamiento':0,'Apoyo en salud':0,'Otra':0,'No sé todavía':0},
+  razones:['Se indicó que la ayuda no puede esperar.'],reportes:['FICTICIO-R001','FICTICIO-R002'],
+  primeraRecepcion:'2026-11-20T15:00:00.000Z',ultimaRecepcion:'2026-11-20T15:02:00.000Z',
+  revisionAntifraude:true,banderas:8,versionReglas:'triaje-2026-11-20.1',versionAgrupacion:'agrupacion-2026-11-20.1'
+};
+// Proyección ficticia local; no modifica reportes[] ni representa una API.
+const detallesPorId = {
+  'FICTICIO-R001':{idReporte:'FICTICIO-R001',personas:4,necesidades:['Agua potable','Alimentos']},
+  'FICTICIO-R002':{idReporte:'FICTICIO-R002',personas:3,necesidades:['Agua potable']}
+};
+const el = id => document.getElementById(id);
+function texto(id, valor){el(id).textContent=valor;}
+function item(lista, valor){const li=document.createElement('li');li.textContent=valor;lista.appendChild(li);}
+texto('priority','Prioridad sugerida: '+({alto:'alta',critico:'crítica',medio:'media'}[incidente.prioridadSugerida]));
+texto('verification',incidente.estadoVerificacion==='por_verificar'?'? Por verificar':'Sin verificar');
+texto('incident-title','Necesidades · '+(incidente.zona || 'Zona desconocida'));
+texto('incident-id',incidente.incidenteId);
+texto('review',incidente.revisionAntifraude?'Revisión antifraude pendiente: hay datos que aclarar. No implica fraude ni reduce la prioridad.':'Sin señal de revisión antifraude; no acredita autenticidad.');
+texto('reports-count',incidente.cantidadReportes);texto('people-count',incidente.cantidadPersonasDeclaradas);
+Object.entries(incidente.necesidades).filter(([,n])=>n>0).forEach(([nombre,n])=>item(el('needs'),nombre+' · '+n+' '+(n===1?'reporte':'reportes')));
+incidente.razones.forEach(razon=>item(el('reasons'),razon));
+texto('dates','Primera recepción ficticia: '+incidente.primeraRecepcion+' · Última recepción ficticia: '+incidente.ultimaRecepcion+' (UTC)');
+incidente.reportes.forEach(id=>{
+  const seccion=document.createElement('section');seccion.className='report';
+  const titulo=document.createElement('h3');titulo.className='id';titulo.textContent=id;seccion.appendChild(titulo);
+  const detalle=detallesPorId[id];const p=document.createElement('p');
+  p.textContent=detalle?('Personas declaradas: '+(detalle.personas===null?'cantidad desconocida':detalle.personas)+'. No son personas únicas.'):'Detalle no disponible.';seccion.appendChild(p);
+  if(detalle){const lista=document.createElement('ul');detalle.necesidades.forEach(n=>item(lista,n));seccion.appendChild(lista);}
+  el('individuals').appendChild(seccion);
+});
+el('toggle').addEventListener('click',()=>{
+  const abierto=el('toggle').getAttribute('aria-expanded')==='true';
+  el('toggle').setAttribute('aria-expanded',String(!abierto));el('details').hidden=abierto;
+  el('toggle').textContent=abierto?'Ver reportes individuales ＋':'Ocultar reportes individuales −';
+});
+el('card').hidden=false;
+</script>
+</body>
+</html>

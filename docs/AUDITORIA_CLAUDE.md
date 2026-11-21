@@ -26,6 +26,13 @@ Revisión de los cambios reales de T1 (`docs/CONTRATO_JSON.md`, `docs/REGLAS_TRI
 | H6 | Abierto (bloqueo legal) | B3. |
 | H7 | Abierto (requiere autorización) | B9. |
 
+## Ronda 3 — T4 (integración backend y entrega PMU)
+
+- `docs/INTEGRACION_BACKEND.md`: las citas a `Servidor.cpp` (líneas 37–38, 84, 87–89, 92–99) coinciden con el código real; incluye la lista de lo no implementado y un riesgo nuevo (B12: `serveStatic` publica la raíz de LittleFS).
+- `docs/ENTREGA_PMU.md`: esquema de `IncidenteAgrupado` marcado como propuesta y `GET /api/tablero` como pendiente.
+- `tools/pmu-maqueta/index.html` en Chromium (iPhone 13): sin peticiones externas ni errores de consola, axe WCAG 2.2 AA sin violaciones, `aria-expanded` cambia con Enter, sin scroll a 360/390 px, aviso de datos ficticios, aclaración de personas no únicas, sin teléfono ni datos de salud.
+- Checks del wrapper en verde; `data/`, `lib/`, `src/`, `platformio.ini` y `tests/` sin cambios.
+
 Resultado final: 19/19 navegador, 80/80 Node, 130/130 legal, C++ en PC y ESP32-S3 en verde, backend sin cambios. Detalle en `docs/VALIDACION.md`.
 
 ### Verificado sin hallazgos
