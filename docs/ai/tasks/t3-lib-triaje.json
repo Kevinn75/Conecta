@@ -23,8 +23,8 @@
   ],
   "checks": [
     ["python", "-I", "tests/triaje/ejecutar.py"],
-    ["C:/Users/ASUS Owen/.platformio/penv/Scripts/pio.exe", "ci", "tests/triaje/esp32_compila.cpp", "--lib", "lib/Triaje", "--board", "esp32-s3-devkitc-1", "--project-option", "framework=arduino"],
-    ["C:/Users/ASUS Owen/.platformio/penv/Scripts/pio.exe", "ci", "tests/triaje/integracion_servidor/main.cpp", "--lib", "lib/Triaje", "--lib", "lib/Servidor", "--project-conf", "platformio.ini", "--environment", "estacion"],
+    ["pio", "ci", "tests/triaje/esp32_compila.cpp", "--lib", "lib/Triaje", "--board", "esp32-s3-devkitc-1", "--project-option", "framework=arduino"],
+    ["pio", "ci", "tests/triaje/integracion_servidor/main.cpp", "--lib", "lib/Triaje", "--lib", "lib/Servidor", "--project-conf", "platformio.ini", "--environment", "estacion"],
     ["git", "diff", "--quiet", "HEAD", "--", "lib/Servidor", "src", "platformio.ini", "lib/Lora", "lib/Protocol"]
   ]
 }
