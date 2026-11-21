@@ -50,6 +50,6 @@ Compilar juntos no significa que el formato sea compatible: el `POST /api/report
 ## Entorno y límites
 
 - Windows 11, Node 26.13.1, Python 3.13.2, g++ 16.2.0 (WinLibs UCRT), PlatformIO 6.2.0, Playwright 1.65.1.
-- MinGW falla al enlazar si su ruta contiene espacios (`C:\Users\ASUS Owen\…`). En este equipo: enlace `C:\Users\Public\mingw64` y `LIBRARY_PATH=C:/Users/Public/mingw64/x86_64-w64-mingw32/lib`.
+- MinGW falla al enlazar si su ruta contiene espacios (por ejemplo, una carpeta de usuario con espacio en el nombre). En este equipo: enlace `C:\Users\Public\mingw64` y `LIBRARY_PATH=C:/Users/Public/mingw64/x86_64-w64-mingw32/lib`.
 - **NO EJECUTADAS:** carga en la placa real, portal cautivo con teléfonos, Safari/VoiceOver reales, tiempos de carga desde la ESP32, LoRa, persistencia, acuses del PMU. Compilar no prueba hardware.
 - Las 9 pruebas de `tests/ai` del puente Codex fallan en Windows nativo por diseño POSIX (ver `docs/ai/VALIDACION.md`); no afectan a este entregable.
